@@ -34,9 +34,12 @@ def copy_surfaces(sbj_dir, sbj_id, brain_surface, inner_skull_surface, outer_ski
     return sbj_id
                                
 
-def create_bem_sol(sbj_id):
+def create_bem_sol(sbj_dir, sbj_id):
     import os 
-    
+    os.system("export SUBJECTS_DIR=" + sbj_dir)
+    os.putenv('SUBJECTS_DIR',sbj_dir)
+    print '*****' + sbj_dir
+    os.system("$SUBJECTS_DIR")
     os.system("$MNE_ROOT/bin/mne_setup_forward_model --subject "+sbj_id + " --homog --surf --ico 4")
     return sbj_id
     
