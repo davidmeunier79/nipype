@@ -51,8 +51,8 @@ def create_main_workflow_FS_segmentation():
         datasource = pe.Node(interface=nio.DataGrabber(infields=['subject_id'], outfields=['struct']),
                              name='datasource')
         datasource.inputs.base_directory = MRI_path
-        datasource.inputs.template = '%s/%s.nii.gz'
-        datasource.inputs.template_args = dict(struct=[['subject_id', 'struct']])
+        datasource.inputs.template = '%s_swap.nii.gz'
+        datasource.inputs.template_args = dict(struct=[['subject_id']])
         datasource.inputs.sort_filelist = True
     else:
         datasource = pe.Node(interface=nio.DataGrabber(infields=['subject_id'],outfields=['dcm_file']),
@@ -64,7 +64,7 @@ def create_main_workflow_FS_segmentation():
         if home:
             datasource.inputs.template = '%s*/*.dcm'
         else:
-            datasource.inputs.template = '%s*/*/*T1*/*.dcm'
+            datasource.inputs.template = '%s*/*/*T1*1mm/*.dcm'
         datasource.inputs.template_args = dict(dcm_file = [['subject_id']] )
         datasource.inputs.sort_filelist = True
 
@@ -138,9 +138,9 @@ def create_main_workflow_FS_segmentation():
     main_workflow.connect(bem, 'outer_skin_surface',  copy_bem_surf, 'outer_skin_surface')
     main_workflow.connect(bem, 'outer_skull_surface', copy_bem_surf, 'outer_skull_surface')
     
-    bem_sol = pe.Node(interface=Function(input_names=['sbj_id'], output_names=['sbj_id'],
+    bem_sol = pe.Node(interface=Function(input_names=['sbj_dir','sbj_id'], output_names=['sbj_id'],
                              function = create_bem_sol), name = 'bem_sol')
-    
+    bem_sol.inputs.sbj_dir = sbj_dir
 
     main_workflow.connect(copy_bem_surf, 'sbj_id', bem_sol, 'sbj_id')
     
