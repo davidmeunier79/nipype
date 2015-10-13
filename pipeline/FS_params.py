@@ -18,12 +18,12 @@ if home:
     sbj       = 'megsim'
     subjects_list = ['megsim', 'dmn_mri']
 else:    
-    main_path = '/home/karim/Documents/pasca/data/MEG-ODYSSEE'    
-    sbj_dir   =  os.path.join(main_path,"FSF")
+    main_path = '/home/karim/Documents/pasca/data/MEG-ODYSSEE' # data dir
+    sbj_dir   =  os.path.join(main_path,"FSF")                 
     MRI_path  =  os.path.join(main_path,"MRI2_odysse")
     
     if test:
-        subjects_list = ['MESMA'] # , 'LAUPA', "MAHAN",'MARLE', 'MERLY'
+        subjects_list = ['MORYV','SANGA','VANSO','VIRJE']  # 
     else:
         subjects_list = ["balai",'benba','casla','doble','droco','duple','frapa',
                          'haimo','laupa','levma','mahan','marle','merly','mesma','moryv','ricro',
