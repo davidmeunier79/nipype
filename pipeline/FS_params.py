@@ -19,8 +19,8 @@ if home:
     subjects_list = ['megsim', 'dmn_mri']
 else:    
     main_path = '/home/karim/Documents/pasca/data/MEG-ODYSSEE' # data dir
-    sbj_dir   =  os.path.join(main_path,"FSF")                 
-    MRI_path  =  os.path.join(main_path,"MRI2_odysse")
+    sbj_dir   =  os.path.join(main_path,"FSF")                 # where FS creates sbj dir           
+    MRI_path  =  os.path.join(main_path,"MRI2_odysse")         # MRI dir
     
     if test:
         subjects_list = ['MORYV','SANGA','VANSO','VIRJE']  # 
