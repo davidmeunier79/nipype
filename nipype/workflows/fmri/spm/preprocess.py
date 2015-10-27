@@ -128,6 +128,218 @@ def create_spm_preproc(name='preproc'):
     return workflow
 
 
+def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_struct_4D_spm12', TR = 2.2, num_slices = 40, slice_code = 4,fast_segment = True,fwhm = [7.5,7.5,8]):
+    """ 
+    Preprocessing old fashioned normalize funct -> struct with SPM12
+    """
+    preprocess = pe.Workflow(name=wf_name)
+
+    #### sliceTiming
+    sliceTiming = pe.Node(interface=spm.SliceTiming(), name="sliceTiming")
+    sliceTiming.inputs.num_slices = num_slices
+    sliceTiming.inputs.time_repetition = TR
+    sliceTiming.inputs.time_acquisition = TR - TR/num_slices
+    
+    if slice_code == 5:  #for Siemens-even interleaved ascending
+            
+        sliceTiming.inputs.slice_order = range(2,num_slices+1,2) + range(1,num_slices+1,2)      #for Siemens-even interleaved ascending
+        sliceTiming.inputs.ref_slice = num_slices-1
+        
+    #sliceTiming.inputs.slice_order = range(1,42,2) + range(2,42,2)      #for Siemens-odd interleaved ascending
+    #sliceTiming.inputs.slice_order = range(1,28+1)      #for bottom up slicing
+    #sliceTiming.inputs.slice_order = range(28,0,-1)    #for top down slicing
+    
+    ##### realign
+    realign = pe.Node(interface=spm.Realign(), name="realign")
+    realign.inputs.register_to_mean = True
+    
+    #art = pe.Node(interface=ra.ArtifactDetect(), name="art")
+    #art.inputs.use_differences      = [True, False]
+    #art.inputs.use_norm             = True
+    #art.inputs.norm_threshold       = 1
+    #art.inputs.zintensity_threshold = 3
+    #art.inputs.mask_type            = 'file'
+    #art.inputs.parameter_source     = 'SPM'
+
+    #skullstrip = pe.Node(interface=fsl.BET(), name="skullstrip")
+    #skullstrip.inputs.mask = True
+    #skullstrip.inputs.reduce_bias = True
+
+    coregister = pe.Node(interface=spm.Coregister(), name="coregister")
+    coregister.inputs.jobtype = 'estimate'
+   
+   
+   
+   
+   
+    
+    ############ SPM12 (Normalize12)
+    #normalize = pe.Node(interface=spm.Normalize12(), name = "normalize")
+    #normalize.inputs.jobtype = 'write'
+    
+    ##smooth = pe.Node(interface=spm.Smooth(), name="smooth")
+    ##smooth.inputs.fwhm = [7.5,7.5,8]
+    
+    
+    
+    
+    
+    ############ Old fashionned segment with SPM12
+   
+    segment= pe.Node(interface=spm.Segment(), name="segment")
+    
+    if fast_segment == True:
+        segment.inputs.gaussians_per_class = [1, 1, 1, 4] #(faster execution)
+    
+    normalize_struct = pe.Node(interface=spm.Normalize(), name = "normalize_struct")
+    normalize_struct.inputs.jobtype = 'write'
+    
+    normalize_func = pe.Node(interface=spm.Normalize(), name = "normalize_func")
+    normalize_func.inputs.jobtype = 'write'
+    
+    smooth = pe.Node(interface=spm.Smooth(), name="smooth")
+    smooth.inputs.fwhm = fwhm
+    
+    
+    
+    
+    
+    
+    ### connect nodes
+    preprocess.connect(sliceTiming,'timecorrected_files',realign,'in_files')
+    
+    preprocess.connect(realign,'mean_image',coregister,'source')
+    preprocess.connect(realign,'realigned_files',coregister,'apply_to_files')
+    
+    
+    ##########SPM12
+    #preprocess.connect(coregister,'coregistered_files',normalize,'apply_to_files')
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    preprocess.connect(coregister,'coregistered_files',normalize_func,'apply_to_files')
+    
+    preprocess.connect(segment,'transformation_mat', normalize_func, 'parameter_file')
+    preprocess.connect(segment,'transformation_mat', normalize_struct, 'parameter_file')
+    
+    
+    preprocess.connect(normalize_func, 'normalized_files',smooth,'in_files')
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    #preprocess.connect(normalize_struct,'normalized_files',skullstrip,'in_file')
+    
+    #preprocess.connect(realign,'realignment_parameters',art,'realignment_parameters')
+    
+    #preprocess.connect(smooth,'smoothed_files',art,'realigned_files')
+    
+    #preprocess.connect(skullstrip,'mask_file',art,'mask_file')
+    
+    #preprocess.config['execution'] = {'remove_unnecessary_outputs':'false'}
+    
+    return preprocess
+    
+    
+
+def create_preprocess_funct_4D_spm8(norm_template_file,wf_name='preprocess_funct_4D_spm8', TR = 2.0, num_slices = 40, slice_code = 5,fwhm = [7.5,7.5,8]):
+    
+    """
+    Preprocessing with SPM8 from 4D file only based on functional scans
+    Normlization is based on Normalize on EPI.nii 
+    """
+    
+    preprocess = pe.Workflow(name=wf_name)
+    
+    
+    #### sliceTiming
+    sliceTiming = pe.Node(interface=spm.SliceTiming(), name="sliceTiming")
+    sliceTiming.inputs.num_slices = num_slices
+    sliceTiming.inputs.time_repetition = TR
+    sliceTiming.inputs.time_acquisition = TR - TR/num_slices
+    
+    if slice_code == 5:  #for Siemens-even interleaved ascending
+            
+        sliceTiming.inputs.slice_order = range(2,num_slices+1,2) + range(1,num_slices+1,2)      #for Siemens-even interleaved ascending
+        sliceTiming.inputs.ref_slice = num_slices-1
+        
+    #sliceTiming.inputs.slice_order = range(1,42,2) + range(2,42,2)      #for Siemens-odd interleaved ascending
+    #sliceTiming.inputs.slice_order = range(1,28+1)      #for bottom up slicing
+    #sliceTiming.inputs.slice_order = range(28,0,-1)    #for top down slicing
+    
+    
+    #### realign
+    realign = pe.Node(interface=spm.Realign(), name="realign")
+    realign.inputs.register_to_mean = True
+    
+    #### normalize_func
+    normalize_func = pe.Node(interface=spm.Normalize(), name = "normalize_func")
+    normalize_func.inputs.jobtype = 'estwrite'
+    normalize_func.inputs.template = norm_template_file
+    
+    
+    #### smooth
+    smooth = pe.Node(interface=spm.Smooth(), name="smooth")
+    smooth.inputs.fwhm = fwhm
+    
+    ### connecting nodes
+    preprocess.connect(sliceTiming,'timecorrected_files',realign,'in_files')
+    preprocess.connect(realign,'mean_image',normalize_func,'source')
+    preprocess.connect(realign, 'realigned_files', normalize_func, 'apply_to_files')
+    preprocess.connect(normalize_func, 'normalized_files',smooth,'in_files')
+    
+    return preprocess
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 def create_vbm_preproc(name='vbmpreproc'):
     """Create a vbm workflow that generates DARTEL-based warps to MNI space
 
