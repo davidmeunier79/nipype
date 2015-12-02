@@ -127,11 +127,20 @@ def create_spm_preproc(name='preproc'):
             ])
     return workflow
 
-def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_to_mean_funct_4D_spm12',fast_segment = True,fwhm = [7.5,7.5,8]):
+from nipype.interfaces.nipy.preprocess import Trim
+
+def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_to_mean_funct_4D_spm12',fast_segment = True,fwhm = [7.5,7.5,8], nb_scans_to_remove = 2):
+    
     """ 
     Preprocessing old fashioned normalize struct -> mean funct with SPM12
     """
     preprocess = pe.Workflow(name=wf_name)
+
+
+    #### trim
+    trim = pe.MapNode(interface=Trim(),iterfield = ['in_file'], name="trim")
+    trim.inputs.begin_index = nb_scans_to_remove
+    
 
     ##### realign
     realign = pe.Node(interface=spm.Realign(), name="realign")
@@ -190,6 +199,9 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
     
     
     ### connect nodes
+    
+    preprocess.connect(trim, 'out_file', realign,'in_files')
+    
     preprocess.connect(realign,'mean_image',coregister,'target')
     #preprocess.connect(realign,'realigned_files',coregister,'apply_to_files')
     
