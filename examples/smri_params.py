@@ -34,12 +34,10 @@ else:
 FS_WF_name    = "_segmentation" 
 BEM_WF_name   = "_watershed_bem" 
 MAIN_WF_name  = "_main_worfflow" 
-
-surf_names     = ['brain_surface',  'inner_skull_surface',  'outer_skull_surface',  'outer_skin_surface']
-new_surf_names = ['brain.surf',     'inner_skull.surf',     'outer_skull.surf',     'outer_skin.surf']
     
     
 if test == True:
-    FS_WF_name = FS_WF_name + '_test'
-    BEM_WF_name = BEM_WF_name + '_test'
+    FS_WF_name   = FS_WF_name   + '_test'
+    BEM_WF_name  = BEM_WF_name  + '_test'
+    MAIN_WF_name = MAIN_WF_name + '_test'
 

@@ -18,9 +18,7 @@ import nipype.pipeline.engine as pe
 from nipype.interfaces.freesurfer import MRIConvert, ReconAll
 from nipype.interfaces.utility import IdentityInterface, Function
 
-from nipype.workflows.smri.freesurfer import create_BEM_workflow
-
-from smri_params import is_nii, sbj_dir, subjects_list, MRI_path, FS_WF_name, BEM_WF_name, MAIN_WF_name
+from smri_params import is_nii, sbj_dir, subjects_list, MRI_path, FS_WF_name, MAIN_WF_name
 
 from nipype.interfaces.mne import WatershedBEM
 
@@ -122,15 +120,10 @@ def create_main_workflow_FS_segmentation():
 #    reconall_workflow.run()
     
 
-    ### (3) BEM generation by the watershed algo of MNE
-#    bem_workflow = create_BEM_workflow(BEM_WF_name)
-
-     ### BEM workflow generation
+    ### (3) BEM generation by the watershed algo of MNE C
     main_workflow = pe.Workflow(name = MAIN_WF_name)
     main_workflow.base_dir = sbj_dir
     
-    
-    #
     bem = pe.Node(interface=WatershedBEM(), infields=['subject_id', 'subjects_dir', 'atlas_mode'],
                                             outfields=['mesh_files'],
                                             name='bem')
@@ -149,18 +142,8 @@ def create_main_workflow_FS_segmentation():
     call_mne_watershed_bem = pe.Node(interface=Function(input_names=['sbj_dir', 'sbj_id'], 
                                                output_names=['sbj_id'],
                                                function = mne_watershed_bem), name = 'call_mne_watershed_bem')
-                                              
-                                               
-#    bem_workflow.connect(input_node, 'subject_id',   call_mne_watershed_bem, 'sbj_id')
-#    bem_workflow.connect(input_node, 'subjects_dir', call_mne_watershed_bem, 'sbj_dir')
-    
-#                            
-#    bem_workflow.connect(input_node, 'subjects_dir',   copy_bem_surf, 'sbj_dir')
-#    bem_workflow.connect(input_node, 'subject_id',     copy_bem_surf, 'sbj_id')
-#    bem_workflow.connect(bem, 'mesh_files',            copy_bem_surf, 'mesh_files')
+                                             
 
-  
-    
     def copy_surfaces(sbj_id, mesh_files):
         import os
         import os.path as op

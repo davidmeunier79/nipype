@@ -3,14 +3,20 @@
 Created on Mon Jan 18 14:51:07 2016
 
 @author: pasca
+
+Call MNE Watershed BEM algorithm by using the WatershedBEM Interface and copy
+the generated surfaces in the bem folder
+
 """
+
+
 # Import modules
 import nipype.pipeline.engine as pe
 from nipype.interfaces.utility import IdentityInterface, Function
 
-from nipype.workflows.smri.freesurfer import create_BEM_workflow
+from nipype.interfaces.mne import WatershedBEM
 
-from smri_params import sbj_dir, subjects_list, BEM_WF_name, MAIN_WF_name
+from smri_params import sbj_dir, subjects_list, BEM_WF_name
 
 
 ### datasource
@@ -19,16 +25,27 @@ infosource.iterables = ('subject_id', subjects_list)
 
 
 ### create BEM workflow
-bem_workflow = create_BEM_workflow(BEM_WF_name)
+bem_workflow = pe.Workflow(BEM_WF_name)
 
 bem_workflow.base_dir = sbj_dir
-bem_workflow.inputs.inputspec.subjects_dir = sbj_dir
 
+bem = pe.Node(interface=WatershedBEM(), infields=['subject_id', 'subjects_dir', 'atlas_mode'],
+                                        outfields=['mesh_files'],
+                                        name='bem')
+ 
+bem.inputs.subjects_dir = sbj_dir             
+bem.inputs.atlas_mode   = True
 
-### create main workflow
-main_workflow = pe.Workflow(name = MAIN_WF_name)
-main_workflow.base_dir = sbj_dir
-main_workflow.connect(infosource, 'subject_id', bem_workflow, 'inputspec.subject_id')
+def mne_watershed_bem(sbj_dir, sbj_id):
+
+    from mne.bem import make_watershed_bem                
+    
+    print 'call make_watershed_bem'
+    make_watershed_bem(sbj_id, sbj_dir, overwrite=True)
+
+call_mne_watershed_bem = pe.Node(interface=Function(input_names=['sbj_dir', 'sbj_id'], 
+                                           output_names=['sbj_id'],
+                                           function = mne_watershed_bem), name = 'call_mne_watershed_bem')
 
 def copy_surfaces(sbj_id, mesh_files):
     import os
@@ -51,8 +68,9 @@ copy_bem_surf = pe.Node(interface=Function(input_names=['sbj_id', 'mesh_files'],
                                            output_names=['sbj_id'],
                         function = copy_surfaces), name = 'copy_bem_surf')
                             
-main_workflow.connect(infosource,   'subject_id',           copy_bem_surf, 'sbj_id')
-main_workflow.connect(bem_workflow, 'outputspec.meshes',    copy_bem_surf, 'mesh_files')
+bem_workflow.connect(infosource, 'subject_id',  bem, 'subject_id')
 
+bem_workflow.connect(infosource, 'subject_id',  copy_bem_surf, 'sbj_id')
+bem_workflow.connect(bem,        'mesh_files',  copy_bem_surf, 'mesh_files')
 
-main_workflow.run() 
+bem_workflow.run() 
