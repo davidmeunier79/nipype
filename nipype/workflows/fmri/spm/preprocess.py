@@ -137,9 +137,9 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
     preprocess = pe.Workflow(name=wf_name)
 
 
-    ##### trim
-    #trim = pe.MapNode(interface=Trim(),iterfield = ['in_file'], name="trim")
-    #trim.inputs.begin_index = nb_scans_to_remove
+    #### trim
+    trim = pe.MapNode(interface=Trim(),iterfield = ['in_file'], name="trim")
+    trim.inputs.begin_index = nb_scans_to_remove
     
 
     ##### realign
@@ -200,10 +200,10 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
     
     ### connect nodes
     
-    #preprocess.connect(trim, 'out_file', realign,'in_files')
+    preprocess.connect(trim, 'out_file', realign,'in_files')
     
-    preprocess.connect(realign,'mean_image',coregister,'target')
-    #preprocess.connect(realign,'realigned_files',coregister,'apply_to_files')
+    #preprocess.connect(realign,'mean_image',coregister,'target')
+    
     
     
     
