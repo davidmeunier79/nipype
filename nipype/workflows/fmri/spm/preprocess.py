@@ -202,18 +202,7 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
     
     preprocess.connect(trim, 'out_file', realign,'in_files')
     
-    #preprocess.connect(realign,'mean_image',coregister,'target')
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    preprocess.connect(realign,'mean_image',coregister,'target')
     
     preprocess.connect(coregister,'coregistered_source',segment,'data')
                        
