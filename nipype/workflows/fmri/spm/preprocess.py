@@ -196,8 +196,8 @@ def create_preprocess_struct_to_mean_funct_4D_spm12_mult(wf_name='preprocess_str
 
 
     #### trim
-    trim = pe.Node(interface=Trim(), name="trim")
-    #trim = pe.MapNode(interface=Trim(), iterfield = ['in_file'],name ="trim")
+    #trim = pe.Node(interface=Trim(), name="trim")
+    trim = pe.MapNode(interface=Trim(), iterfield = ['in_file'],name ="trim")
     trim.inputs.begin_index = nb_scans_to_remove
     
 
