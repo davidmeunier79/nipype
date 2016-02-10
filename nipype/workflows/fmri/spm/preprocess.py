@@ -147,36 +147,9 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
     realign = pe.Node(interface=spm.Realign(), name="realign")
     realign.inputs.register_to_mean = True
     
-    #art = pe.Node(interface=ra.ArtifactDetect(), name="art")
-    #art.inputs.use_differences      = [True, False]
-    #art.inputs.use_norm             = True
-    #art.inputs.norm_threshold       = 1
-    #art.inputs.zintensity_threshold = 3
-    #art.inputs.mask_type            = 'file'
-    #art.inputs.parameter_source     = 'SPM'
-
-    #skullstrip = pe.Node(interface=fsl.BET(), name="skullstrip")
-    #skullstrip.inputs.mask = True
-    #skullstrip.inputs.reduce_bias = True
-
     coregister = pe.Node(interface=spm.Coregister(), name="coregister")
     coregister.inputs.jobtype = 'estimate'
    
-   
-   
-   
-   
-    
-    ############ SPM12 (Normalize12)
-    #normalize = pe.Node(interface=spm.Normalize12(), name = "normalize")
-    #normalize.inputs.jobtype = 'write'
-    
-    ##smooth = pe.Node(interface=spm.Smooth(), name="smooth")
-    ##smooth.inputs.fwhm = [7.5,7.5,8]
-    
-    
-    
-    
     
     ############ Old fashionned segment with SPM12
    
@@ -193,11 +166,6 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
     
     smooth = pe.Node(interface=spm.Smooth(), name="smooth")
     smooth.inputs.fwhm = fwhm
-    
-    
-    
-    
-    
     
     ### connect nodes
     
@@ -219,7 +187,65 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
     
     return preprocess
     
+def create_preprocess_struct_to_mean_funct_4D_spm12_mult(wf_name='preprocess_struct_to_mean_funct_4D_spm12',fast_segment = True,fwhm = [7.5,7.5,8], nb_scans_to_remove = 2):
     
+    """ 
+    Preprocessing old fashioned normalize struct -> mean funct with SPM12
+    """
+    preprocess = pe.Workflow(name=wf_name)
+
+
+    #### trim
+    trim = pe.Node(interface=Trim(), name="trim")
+    #trim = pe.MapNode(interface=Trim(), iterfield = ['in_file'],name ="trim")
+    trim.inputs.begin_index = nb_scans_to_remove
+    
+
+    ##### realign
+    realign = pe.Node(interface=spm.Realign(), name="realign")
+    realign.inputs.register_to_mean = True
+    
+    coregister = pe.Node(interface=spm.Coregister(), name="coregister")
+    coregister.inputs.jobtype = 'estimate'
+   
+    
+    ############ Old fashionned segment with SPM12
+   
+    segment= pe.Node(interface=spm.Segment(), name="segment")
+    
+    if fast_segment == True:
+        segment.inputs.gaussians_per_class = [1, 1, 1, 4] #(faster execution)
+    
+    normalize_func = pe.Node(interface=spm.Normalize(), name = "normalize_func")
+    normalize_func.inputs.jobtype = 'write'
+    
+    normalize_struct = pe.Node(interface=spm.Normalize(), name = "normalize_struct")
+    normalize_struct.inputs.jobtype = 'write'
+    
+    smooth = pe.Node(interface=spm.Smooth(), name="smooth")
+    smooth.inputs.fwhm = fwhm
+    
+    ### connect nodes
+    
+    preprocess.connect(trim, 'out_file', realign,'in_files')
+    
+    preprocess.connect(realign,'mean_image',coregister,'target')
+    
+    preprocess.connect(coregister,'coregistered_source',segment,'data')
+                       
+                       
+    preprocess.connect(realign,'realigned_files',normalize_func,'apply_to_files')
+    preprocess.connect(segment,'transformation_mat', normalize_func, 'parameter_file')
+    
+    preprocess.connect(coregister,'coregistered_source', normalize_struct, 'apply_to_files')
+    preprocess.connect(segment,'transformation_mat', normalize_struct, 'parameter_file')
+    
+    
+    preprocess.connect(normalize_func, 'normalized_files',smooth,'in_files')
+    
+    return preprocess
+    
+        
     
     
 
