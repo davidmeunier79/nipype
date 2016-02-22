@@ -227,4 +227,42 @@ def unflatten(in_list, prev_structure):
         return out
 
 
+########################### ajout DM
 
+
+#### fonctions utilitaires vite faites ###################################
+
+def get_first(string_list):
+    #print string_list
+    return string_list[0]
+    
+def get_second(string_list):
+    return string_list[1]
+    
+### utilitaire pour vérifier la longueur d'une liste sans avoir à créer de nouveaux noeuds
+def show_length(files):
+
+    print len(files)
+    
+    return files
+    
+### utilitaire pour vérifier une liste sans avoir à créer de nouveaux noeuds
+def show_files(files):
+
+    print files
+    
+    return files
+
+### idem fonction list::index(), mais retourne tous les indices de la liste ou l'item est présent
+def get_multiple_indexes(cur_list,item):
+    
+    return [i for i,list_item in enumerate(cur_list) if list_item == item]
+
+### test dimensions 
+def check_dimensions(indexes,shape):
+
+    if indexes[0] >= 0 and indexes[0] < shape[0] and indexes[1] >= 0 and indexes[1] < shape[1] and indexes[2] >= 0 and indexes[2] < shape[2] :
+        return True
+    else: 
+        return False
+        
