@@ -4,11 +4,13 @@ import nipype
 
 
 import nipype.interfaces.io as nio
-import nipype.interfaces.spm as spm
-#import nipype.interfaces.dcm2nii as dn
-import nipype.interfaces.freesurfer as fs    # freesurfer
+import nipype.interfaces.utility as niu
 
-from nipype.interfaces import fsl
+import nipype.interfaces.spm as spm
+
+#import nipype.interfaces.freesurfer as fs    # freesurfer
+
+#from nipype.interfaces import fsl
 
 #import nipype.algorithms.rapidart as ra
 import nipype.algorithms.modelgen as model
@@ -19,12 +21,19 @@ from nipype.pipeline.engine import Workflow
 
 
 
-def create_level1_4D_spm12(contrasts, TR = 2.0, deriv1 = False,concat_runs = True):
+def create_level1_4D_spm12(contrasts, TR = 2.0, deriv1 = False, concat_runs = True):
 
     l1analysis = pe.Workflow(name='level1_4D_spm12')
     
-    ##### define nodes     
+    #################### inputs ###################
+    inputnode = pe.Node(niu.IdentityInterface(fields=['subject_info',
+                                                      'functional_runs',
+                                                      'realignment_parameters',
+                                                      'time_repetition',]),
+                        name='inputnode')
+
     
+    ##### define nodes         
     modelspec = pe.Node(interface=model.SpecifySPMModel(), name= "modelspec")
     modelspec.inputs.high_pass_filter_cutoff = 128
     modelspec.inputs.time_repetition = TR  
@@ -53,7 +62,15 @@ def create_level1_4D_spm12(contrasts, TR = 2.0, deriv1 = False,concat_runs = Tru
     contrastestimate.inputs.contrasts = contrasts 
     
     #### connect nodes
+    ### from inputnode
+    l1analysis.connect(inputnode, 'subject_info', modelspec, 'subject_info')
+    l1analysis.connect(inputnode, 'functional_runs', modelspec, 'functional_runs')
+    l1analysis.connect(inputnode, 'realignment_parameters',modelspec,'realignment_parameters')
     
+    l1analysis.connect(inputnode, 'time_repetition',modelspec,'time_repetition')
+    l1analysis.connect(inputnode, 'time_repetition',level1design,'interscan_interval')
+    
+    ### other nodes
     l1analysis.connect(modelspec,'session_info', level1design,'session_info')
     
     l1analysis.connect(level1design,'spm_mat_file', level1estimate,'spm_mat_file')
