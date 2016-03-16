@@ -5,7 +5,7 @@ Created on Tue Jan 19 11:11:02 2016
 @author: pasca
 
 Call recon-all on set of subjects and then run the MNE watershed bem algorithm
-    python run_FS_segmentation.py
+    python smri_reconall.py
 
 """
 
@@ -33,7 +33,8 @@ def create_main_workflow_FS_segmentation():
             
     if not op.exists(sbj_dir):
         os.mkdir(sbj_dir)
-        
+      
+      
     ### (1) iterate over subjects to define paths with templates -> Infosource and DataGrabber
     #       Node: SubjectData - we use IdentityInterface to create our own node, to specify
     #       the list of subjects the pipeline should be executed on
@@ -45,6 +46,7 @@ def create_main_workflow_FS_segmentation():
     #   Here we define an input field for datagrabber called subject_id. 
     #   This is then used to set the template (see %s in the template).
 
+    # we can look for DICOM files or .nii ones
     if is_nii:  
         datasource = pe.Node(interface=nio.DataGrabber(infields=['subject_id'], 
                                                        outfields=['struct']),
@@ -59,7 +61,7 @@ def create_main_workflow_FS_segmentation():
         datasource.inputs.template_args = dict(dcm_file = [['subject_id']] )
         
     datasource.inputs.base_directory = MRI_path # dir where the MRI files are
-    datasource.inputs.sort_filelist = True
+    datasource.inputs.sort_filelist  = True
     
     # get the path of the first dicom file
     def get_first_file(dcm_files):
@@ -116,22 +118,23 @@ def create_main_workflow_FS_segmentation():
         reconall_workflow.connect(get_MRI_sbjdir,  'struct_filename', mri_convert, 'out_file')
         
         reconall_workflow.connect(mri_convert, 'out_file',  recon_all, 'T1_files')
-            
-#    reconall_workflow.run()
     
 
     ### (3) BEM generation by the watershed algo of MNE C
     main_workflow = pe.Workflow(name = MAIN_WF_name)
     main_workflow.base_dir = sbj_dir
     
-    bem = pe.Node(interface=WatershedBEM(), infields=['subject_id', 'subjects_dir', 'atlas_mode'],
-                                            outfields=['mesh_files'],
-                                            name='bem')
-    bem.inputs.subjects_dir = sbj_dir 
-    bem.inputs.atlas_mode = True
+    # I mode: WatershedBEM Interface of nipype
+    bem_generation = pe.Node(interface=WatershedBEM(), 
+                                infields=['subject_id', 'subjects_dir', 'atlas_mode'],
+                                outfields=['mesh_files'],
+                             name='bem_generation')
+    bem_generation.inputs.subjects_dir = sbj_dir 
+    bem_generation.inputs.atlas_mode   = True
     
-    main_workflow.connect(reconall_workflow, 'recon_all.subject_id', bem, 'subject_id')
+    main_workflow.connect(reconall_workflow, 'recon_all.subject_id', bem_generation, 'subject_id')
     
+    # II mode: make_watershed_bem of MNE Python package
     def mne_watershed_bem(sbj_dir, sbj_id):
 
         from mne.bem import make_watershed_bem                
@@ -140,10 +143,13 @@ def create_main_workflow_FS_segmentation():
         make_watershed_bem(sbj_id, sbj_dir, overwrite=True)
 
     call_mne_watershed_bem = pe.Node(interface=Function(input_names=['sbj_dir', 'sbj_id'], 
-                                               output_names=['sbj_id'],
-                                               function = mne_watershed_bem), name = 'call_mne_watershed_bem')
+                                                        output_names=['sbj_id'],
+                                                        function = mne_watershed_bem), 
+                                     name = 'call_mne_watershed_bem')
                                              
 
+    # copy the generated meshes from bem/watershed to bem/ and change the names according
+    # to MNE 
     def copy_surfaces(sbj_id, mesh_files):
         import os
         import os.path as op
@@ -163,14 +169,14 @@ def create_main_workflow_FS_segmentation():
     
     copy_bem_surf = pe.Node(interface=Function(input_names=['sbj_id', 'mesh_files'], 
                                                output_names=['sbj_id'],
-                            function = copy_surfaces), name = 'copy_bem_surf')
+                                               function = copy_surfaces), 
+                            name = 'copy_bem_surf')
                             
     main_workflow.connect(infosource,   'subject_id',    copy_bem_surf, 'sbj_id')
-    main_workflow.connect(bem,           'mesh_files',    copy_bem_surf, 'mesh_files')
+    main_workflow.connect(bem_generation,          'mesh_files',    copy_bem_surf, 'mesh_files')
 
 
     return main_workflow
-
 
 
 ### Execute the pipeline
@@ -185,6 +191,6 @@ if __name__ == '__main__':
     ### run pipeline:
     main_workflow = create_main_workflow_FS_segmentation()
     
-    # main_workflow.write_graph()
+    main_workflow.write_graph(graph2use='colored')
     main_workflow.config['execution'] = {'remove_unnecessary_outputs':'false'}
     main_workflow.run(plugin='MultiProc', plugin_args={'n_procs' : 8})    

@@ -36,17 +36,6 @@ bem = pe.Node(interface=WatershedBEM(), infields=['subject_id', 'subjects_dir', 
 bem.inputs.subjects_dir = sbj_dir             
 bem.inputs.atlas_mode   = True
 
-def mne_watershed_bem(sbj_dir, sbj_id):
-
-    from mne.bem import make_watershed_bem                
-    
-    print 'call make_watershed_bem'
-    make_watershed_bem(sbj_id, sbj_dir, overwrite=True)
-
-call_mne_watershed_bem = pe.Node(interface=Function(input_names=['sbj_dir', 'sbj_id'], 
-                                           output_names=['sbj_id'],
-                                           function = mne_watershed_bem), name = 'call_mne_watershed_bem')
-
 def copy_surfaces(sbj_id, mesh_files):
     import os
     import os.path as op
