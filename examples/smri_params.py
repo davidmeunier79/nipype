@@ -14,7 +14,7 @@ if getpass.getuser() == 'pasca':
     main_path = '/home/pasca/Dropbox/work/karim/data/'
     sbj_dir   = '/home/pasca/Science/research/MEG/work/subjects/'    
     MRI_path  = os.path.join(sbj_dir,"MRI")
-    subjects_list = ['monk0002', 'prova']  # ['dmn_mri','Monk1'] #['monk0002']  'dmn_mri'
+    subjects_list = ['monk0002']  # ['dmn_mri','Monk1'] #['monk0002']  'dmn_mri'
 else:    
     main_path = '/media/karim/DATAS/MEDITATION'         # data dir
     sbj_dir   =  os.path.join(main_path,"FSF")          # where FS creates sbj dir           
@@ -31,9 +31,9 @@ else:
                          'monk0011','monk0012']
         
 # dir names in main_path=sbj_dir
-FS_WF_name    = "_segmentation" 
-BEM_WF_name   = "_watershed_bem" 
-MAIN_WF_name  = "_main_worfflow" 
+FS_WF_name    = "segmentation_workflow" 
+BEM_WF_name   = "watershed_bem" 
+MAIN_WF_name  = "main_workflow" 
     
     
 if test == True:
