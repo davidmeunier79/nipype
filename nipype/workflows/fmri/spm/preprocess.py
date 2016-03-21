@@ -137,6 +137,11 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
     preprocess = pe.Workflow(name=wf_name)
 
     
+    
+    inputnode = pe.Node(niu.IdentityInterface(fields=['functionals',
+                                                      'struct']),
+                        name='inputnode')
+     
     #### trim
     if mult == True:    
         trim = pe.MapNode(interface=Trim(), iterfield = ['in_file'],name ="trim")
@@ -172,9 +177,11 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
     smooth.inputs.fwhm = fwhm
     
     ### connect nodes
+    preprocess.connect(inputnode,'functionals',trim,'in_file')
     
     preprocess.connect(trim, 'out_file', realign,'in_files')
     
+    preprocess.connect(inputnode, 'struct', coregister,'source')
     preprocess.connect(realign,'mean_image',coregister,'target')
     
     preprocess.connect(coregister,'coregistered_source',segment,'data')
@@ -230,9 +237,14 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
         
         if slice_code == 5:  #for Siemens-even interleaved ascending
                 
-            slice_timingnode.inputs.slice_order = range(2,num_slices+1,2) + range(1,num_slices+1,2)      #for Siemens-even interleaved ascending
+            slice_timingnode.inputs.slice_order = range(2,num_slices+1,2) + range(1,num_slices+1,2)      #for Siemens-even interleaved ascending 
             slice_timingnode.inputs.ref_slice = num_slices-1
                 
+        elif slice_code == 2:  #for Siemens sequential_decreasing
+                
+            slice_timingnode.inputs.slice_order = range(num_slices,0,-1)
+            slice_timingnode.inputs.ref_slice = int(num_slices/2.0)
+              
         #sliceTiming.inputs.slice_order = range(1,42,2) + range(2,42,2)      #for Siemens-odd interleaved ascending
         #sliceTiming.inputs.slice_order = range(1,28+1)      #for bottom up slicing
         #sliceTiming.inputs.slice_order = range(28,0,-1)    #for top down slicing
