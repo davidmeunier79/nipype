@@ -202,7 +202,7 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
     
     
 
-def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_struct_4D_spm12', mult = True, trim = False, slice_timing = False, fast_segment = True, smooth = False, output_normalized_segmented_maps = False, nb_scans_to_remove = 2, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8]):
+def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_struct_4D_spm12', mult = True, trimming = False, slice_timing = False, fast_segment = True, smoothing = False, output_normalized_segmented_maps = False, nb_scans_to_remove = 2, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8]):
     """ 
     Preprocessing old fashioned normalize funct -> struct with SPM12
     """
@@ -214,36 +214,36 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
                         name='inputnode')
      
     if nb_scans_to_remove != 0:
-        trim = False
+        trimming = False
         
-    if trim == True:
+    if trimming == True:
             
         #### trim
         if mult == True:
-            trimnode = pe.MapNode(interface=Trim(), iterfield = ['in_file'],name ="trim")
+            trim = pe.MapNode(interface=Trim(), iterfield = ['in_file'],name ="trim")
         else:
-            trimnode = pe.Node(interface=Trim(), name="trimnode")
+            trim = pe.Node(interface=Trim(), name="trim")
             
-        trimnode.inputs.begin_index = nb_scans_to_remove
+        trim.inputs.begin_index = nb_scans_to_remove
           
         
     if slice_timing == True:
         
         #### sliceTiming
-        slice_timingnode = pe.Node(interface=spm.SliceTiming(), name="slice_timingnode")
-        slice_timingnode.inputs.num_slices = num_slices
-        slice_timingnode.inputs.time_repetition = TR
-        slice_timingnode.inputs.time_acquisition = TR - TR/num_slices
+        sliceTiming = pe.Node(interface=spm.SliceTiming(), name="sliceTiming")
+        sliceTiming.inputs.num_slices = num_slices
+        sliceTiming.inputs.time_repetition = TR
+        sliceTiming.inputs.time_acquisition = TR - TR/num_slices
         
         if slice_code == 5:  #for Siemens-even interleaved ascending
                 
-            slice_timingnode.inputs.slice_order = range(2,num_slices+1,2) + range(1,num_slices+1,2)      #for Siemens-even interleaved ascending 
-            slice_timingnode.inputs.ref_slice = num_slices-1
+            sliceTiming.inputs.slice_order = range(2,num_slices+1,2) + range(1,num_slices+1,2)      #for Siemens-even interleaved ascending 
+            sliceTiming.inputs.ref_slice = num_slices-1
                 
         elif slice_code == 2:  #for Siemens sequential_decreasing
                 
-            slice_timingnode.inputs.slice_order = range(num_slices,0,-1)
-            slice_timingnode.inputs.ref_slice = int(num_slices/2.0)
+            sliceTiming.inputs.slice_order = range(num_slices,0,-1)
+            sliceTiming.inputs.ref_slice = int(num_slices/2.0)
               
         #sliceTiming.inputs.slice_order = range(1,42,2) + range(2,42,2)      #for Siemens-odd interleaved ascending
         #sliceTiming.inputs.slice_order = range(1,28+1)      #for bottom up slicing
@@ -253,19 +253,19 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
     realign = pe.Node(interface=spm.Realign(), name="realign")
     realign.inputs.register_to_mean = True
     
-    if trim == True:
+    if trimming == True:
         
-        preprocess.connect(inputnode,'functionals',trimnode,'in_file')
+        preprocess.connect(inputnode,'functionals',trim,'in_file')
         
         if slice_timing == True: 
-            preprocess.connect(trim, 'out_file', slice_timingnode,'in_files')
-            preprocess.connect(slice_timingnode, 'timecorrected_files', realign,'in_files')
+            preprocess.connect(trim, 'out_file', sliceTiming,'in_files')
+            preprocess.connect(sliceTiming, 'timecorrected_files', realign,'in_files')
         else: 
             preprocess.connect(trim, 'out_file', realign,'in_files')
     else:
         if slice_timing == True: 
-            preprocess.connect(inputnode,'functionals', slice_timingnode,'in_files')
-            preprocess.connect(slice_timingnode, 'timecorrected_files', realign,'in_files')
+            preprocess.connect(inputnode,'functionals', sliceTiming,'in_files')
+            preprocess.connect(sliceTiming, 'timecorrected_files', realign,'in_files')
         else: 
             preprocess.connect(inputnode,'functionals', realign,'in_files')
     
@@ -313,16 +313,16 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
     preprocess.connect(coregister,'coregistered_files',normalize_func,'apply_to_files')    
     preprocess.connect(segment,'transformation_mat', normalize_func, 'parameter_file')
     
-    if smooth == True:
+    if smoothing == True:
         
         ### smoothing
-        smoothnode = pe.Node(interface=spm.Smooth(), name="smoothnode")
-        smoothnode.inputs.fwhm = fwhm
+        smooth = pe.Node(interface=spm.Smooth(), name="smooth")
+        smooth.inputs.fwhm = fwhm
         
     
     ### connect nodes
     if smooth == True:
-        preprocess.connect(normalize_func, 'normalized_files',smoothnode,'in_files')
+        preprocess.connect(normalize_func, 'normalized_files',smooth,'in_files')
     
     return preprocess
     
