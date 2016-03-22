@@ -129,7 +129,7 @@ def create_spm_preproc(name='preproc'):
 
 from nipype.interfaces.nipy.preprocess import Trim
 
-def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_to_mean_funct_4D_spm12',mult = True, fast_segment = True,fwhm = [7.5,7.5,8], nb_scans_to_remove = 2):
+def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_to_mean_funct_4D_spm12',mult = True, fast_segment = True,fwhm = [7.5,7.5,8], nb_scans_to_remove = 2, trimming = True):
     
     """ 
     Preprocessing old fashioned normalize struct -> mean funct with SPM12
@@ -143,14 +143,20 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
                         name='inputnode')
      
     #### trim
-    if mult == True:    
-        trim = pe.MapNode(interface=Trim(), iterfield = ['in_file'],name ="trim")
-        
-    else:
-        trim = pe.Node(interface=Trim(), name="trim")
-        
-    trim.inputs.begin_index = nb_scans_to_remove
     
+    if nb_scans_to_remove == 0:
+        trimming == False:
+        
+    if trimming == True:
+        
+        if mult == True:    
+            trim = pe.MapNode(interface=Trim(), iterfield = ['in_file'],name ="trim")
+            
+        else:
+            trim = pe.Node(interface=Trim(), name="trim")
+            
+        trim.inputs.begin_index = nb_scans_to_remove
+        
 
     ##### realign
     realign = pe.Node(interface=spm.Realign(), name="realign")
@@ -177,9 +183,13 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
     smooth.inputs.fwhm = fwhm
     
     ### connect nodes
-    preprocess.connect(inputnode,'functionals',trim,'in_file')
     
-    preprocess.connect(trim, 'out_file', realign,'in_files')
+    if trimming == True:
+        preprocess.connect(inputnode,'functionals',trim,'in_file')
+        preprocess.connect(trim, 'out_file', realign,'in_files')
+    else:
+        preprocess.connect(inputnode,'functionals', realign,'in_files')
+        
     
     preprocess.connect(inputnode, 'struct', coregister,'source')
     preprocess.connect(realign,'mean_image',coregister,'target')
