@@ -145,7 +145,7 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
     #### trim
     
     if nb_scans_to_remove == 0:
-        trimming == False:
+        trimming = False
         
     if trimming == True:
         
