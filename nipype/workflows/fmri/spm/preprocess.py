@@ -368,7 +368,7 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
         
     
     ### connect nodes
-    if smooth == True:
+    if smoothing == True:
         preprocess.connect(normalize_func, 'normalized_files',smooth,'in_files')
     
     return preprocess
