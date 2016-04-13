@@ -129,7 +129,7 @@ def create_spm_preproc(name='preproc'):
 
 from nipype.interfaces.nipy.preprocess import Trim
 
-def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_to_mean_funct_4D_spm12',mult = True, fast_segment = True,fwhm = [7.5,7.5,8], nb_scans_to_remove = 2, trimming = True):
+def create_preprocess_struct_to_mean_funct_4D_spm12(TR, wf_name='preprocess_struct_to_mean_funct_4D_spm12',mult = True, fast_segmenting = True,smoothing = False, fwhm = [],slice_timing = False,  num_slices = 40, slice_code = 5, nb_scans_to_remove = 2, trimming = True):
     
     """ 
     Preprocessing old fashioned normalize struct -> mean funct with SPM12
@@ -158,6 +158,30 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
         trim.inputs.begin_index = nb_scans_to_remove
         
 
+    if slice_timing == True:
+        
+        #### sliceTiming
+        sliceTiming = pe.Node(interface=spm.SliceTiming(), name="sliceTiming")
+        sliceTiming.inputs.num_slices = num_slices
+        sliceTiming.inputs.time_repetition = TR
+        sliceTiming.inputs.time_acquisition = TR - TR/num_slices
+        
+        if slice_code == 5:  #for Siemens-even interleaved ascending
+                
+            sliceTiming.inputs.slice_order = range(2,num_slices+1,2) + range(1,num_slices+1,2)      #for Siemens-even interleaved ascending 
+            #sliceTiming.inputs.ref_slice = num_slices-1
+            sliceTiming.inputs.ref_slice = num_slices ### a verifier...
+                
+        elif slice_code == 2:  #for Siemens sequential_decreasing
+                
+            sliceTiming.inputs.slice_order = range(num_slices,0,-1)
+            sliceTiming.inputs.ref_slice = int(num_slices/2.0)
+              
+        #sliceTiming.inputs.slice_order = range(1,42,2) + range(2,42,2)      #for Siemens-odd interleaved ascending
+        #sliceTiming.inputs.slice_order = range(1,28+1)      #for bottom up slicing
+        #sliceTiming.inputs.slice_order = range(28,0,-1)    #for top down slicing
+        
+        
     ##### realign
     realign = pe.Node(interface=spm.Realign(), name="realign")
     realign.inputs.register_to_mean = True
@@ -170,7 +194,7 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
    
     segment= pe.Node(interface=spm.Segment(), name="segment")
     
-    if fast_segment == True:
+    if fast_segmenting == True:
         segment.inputs.gaussians_per_class = [1, 1, 1, 4] #(faster execution)
     
     normalize_func = pe.Node(interface=spm.Normalize(), name = "normalize_func")
@@ -179,17 +203,29 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
     normalize_struct = pe.Node(interface=spm.Normalize(), name = "normalize_struct")
     normalize_struct.inputs.jobtype = 'write'
     
-    smooth = pe.Node(interface=spm.Smooth(), name="smooth")
-    smooth.inputs.fwhm = fwhm
+    if smoothing == True:
+        smooth = pe.Node(interface=spm.Smooth(), name="smooth")
+        smooth.inputs.fwhm = fwhm
     
     ### connect nodes
     
     if trimming == True:
-        preprocess.connect(inputnode,'functionals',trim,'in_file')
-        preprocess.connect(trim, 'out_file', realign,'in_files')
-    else:
-        preprocess.connect(inputnode,'functionals', realign,'in_files')
         
+        preprocess.connect(inputnode,'functionals',trim,'in_file')
+        
+        if slice_timing == True: 
+            
+            preprocess.connect(trim, 'out_file', sliceTiming,'in_files')
+            preprocess.connect(sliceTiming, 'timecorrected_files', realign,'in_files')
+        else: 
+            preprocess.connect(trim, 'out_file', realign,'in_files')
+    else:
+        if slice_timing == True: 
+            preprocess.connect(inputnode,'functionals', sliceTiming,'in_files')
+            preprocess.connect(sliceTiming, 'timecorrected_files', realign,'in_files')
+        else: 
+            preprocess.connect(inputnode,'functionals', realign,'in_files')
+    
     
     preprocess.connect(inputnode, 'struct', coregister,'source')
     preprocess.connect(realign,'mean_image',coregister,'target')
@@ -203,8 +239,8 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
     preprocess.connect(coregister,'coregistered_source', normalize_struct, 'apply_to_files')
     preprocess.connect(segment,'transformation_mat', normalize_struct, 'parameter_file')
     
-    
-    preprocess.connect(normalize_func, 'normalized_files',smooth,'in_files')
+    if smoothing == True:
+        preprocess.connect(normalize_func, 'normalized_files',smooth,'in_files')
     
     return preprocess
     
@@ -212,7 +248,7 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(wf_name='preprocess_struct_t
     
     
 
-def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_struct_4D_spm12', mult = True, trimming = False, slice_timing = False, fast_segment = True, smoothing = False, output_normalized_segmented_maps = False, nb_scans_to_remove = 2, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8]):
+def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_struct_4D_spm12', mult = True, trimming = False, slice_timing = False, fast_segmenting = True, smoothing = False, output_normalized_segmented_maps = False, nb_scans_to_remove = 2, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8]):
     """ 
     Preprocessing old fashioned normalize funct -> struct with SPM12
     """
@@ -248,7 +284,8 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
         if slice_code == 5:  #for Siemens-even interleaved ascending
                 
             sliceTiming.inputs.slice_order = range(2,num_slices+1,2) + range(1,num_slices+1,2)      #for Siemens-even interleaved ascending 
-            sliceTiming.inputs.ref_slice = num_slices-1
+            #sliceTiming.inputs.ref_slice = num_slices-1
+            sliceTiming.inputs.ref_slice = num_slices ### a verifier...
                 
         elif slice_code == 2:  #for Siemens sequential_decreasing
                 
@@ -299,7 +336,7 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
    
     segment= pe.Node(interface=spm.Segment(), name="segment")
     
-    if fast_segment == True:
+    if fast_segmenting == True:
         segment.inputs.gaussians_per_class = [1, 1, 1, 4] #(faster execution)
     
     if output_normalized_segmented_maps == True:
