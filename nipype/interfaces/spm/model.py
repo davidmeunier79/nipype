@@ -218,11 +218,15 @@ class EstimateModel(SPMCommand):
     def _list_outputs(self):
         outputs = self._outputs().get()
         pth, _ = os.path.split(self.inputs.spm_mat_file)
-        spm12 = '12' in self.version.split('.')[0]
-        if spm12:
-            mask = os.path.join(pth, 'mask.nii')
-        else:
-            mask = os.path.join(pth, 'mask.img')
+        mask = os.path.join(pth, 'mask.nii')
+        
+        ## pb version a l'IN2P3
+        #spm12 = '12' in self.version.split('.')[0]
+        #if spm12:
+            #mask = os.path.join(pth, 'mask.nii')
+        #else:
+            #mask = os.path.join(pth, 'mask.img')
+            
         outputs['mask_image'] = mask
         spm = sio.loadmat(self.inputs.spm_mat_file, struct_as_record=False)
         betas = []
