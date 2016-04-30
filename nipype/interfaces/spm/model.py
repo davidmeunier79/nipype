@@ -232,17 +232,26 @@ class EstimateModel(SPMCommand):
         betas = []
         for vbeta in spm['SPM'][0, 0].Vbeta[0]:
             betas.append(str(os.path.join(pth, vbeta.fname[0])))
+            
         if betas:
             outputs['beta_images'] = betas
-        if spm12:
-            resms = os.path.join(pth, 'ResMS.nii')
-        else:
-            resms = os.path.join(pth, 'ResMS.img')
+            
+        #if spm12:
+            #resms = os.path.join(pth, 'ResMS.nii')
+        #else:
+            #resms = os.path.join(pth, 'ResMS.img')
+            
+        resms = os.path.join(pth, 'ResMS.nii')
+        
         outputs['residual_image'] = resms
-        if spm12:
-            rpv = os.path.join(pth, 'RPV.nii')
-        else:
-            rpv = os.path.join(pth, 'RPV.img')
+        
+        #if spm12:
+            #rpv = os.path.join(pth, 'RPV.nii')
+        #else:
+            #rpv = os.path.join(pth, 'RPV.img')
+            
+        rpv = os.path.join(pth, 'RPV.nii')
+            
         outputs['RPVimage'] = rpv
         spm = os.path.join(pth, 'SPM.mat')
         outputs['spm_mat_file'] = spm
