@@ -410,17 +410,25 @@ class EstimateContrast(SPMCommand):
         if con_images:
             outputs['con_images'] = con_images
             outputs['spmT_images'] = spmT_images
-        spm12 = '12' in self.version.split('.')[0]
-        if spm12:
-            ess = glob(os.path.join(pth, 'ess*.nii'))
-        else:
-            ess = glob(os.path.join(pth, 'ess*.img'))
+            
+        ess = glob(os.path.join(pth, 'ess*.nii'))
+            
+        #spm12 = '12' in self.version.split('.')[0]
+        #if spm12:
+            #ess = glob(os.path.join(pth, 'ess*.nii'))
+        #else:
+            #ess = glob(os.path.join(pth, 'ess*.img'))
+            
         if len(ess) > 0:
             outputs['ess_images'] = sorted(ess)
-        if spm12:
-            spmf = glob(os.path.join(pth, 'spmF*.nii'))
-        else:
-            spmf = glob(os.path.join(pth, 'spmF*.img'))
+            
+        spmf = glob(os.path.join(pth, 'spmF*.nii'))
+            
+        #if spm12:
+            #spmf = glob(os.path.join(pth, 'spmF*.nii'))
+        #else:
+            #spmf = glob(os.path.join(pth, 'spmF*.img'))
+            
         if len(spmf) > 0:
             outputs['spmF_images'] = sorted(spmf)
         outputs['spm_mat_file'] = self.inputs.spm_mat_file
