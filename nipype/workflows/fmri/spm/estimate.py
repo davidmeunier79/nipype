@@ -21,7 +21,7 @@ from nipype.pipeline.engine import Workflow
 
 
 
-def create_level1_4D_spm12(contrasts, TR = 2.0, deriv1 = False, concat_runs = True):
+def create_level1_4D_spm12(contrasts, deriv1 = False, concat_runs = True):
 
     l1analysis = pe.Workflow(name='level1_4D_spm12')
     
@@ -36,7 +36,7 @@ def create_level1_4D_spm12(contrasts, TR = 2.0, deriv1 = False, concat_runs = Tr
     ##### define nodes         
     modelspec = pe.Node(interface=model.SpecifySPMModel(), name= "modelspec")
     modelspec.inputs.high_pass_filter_cutoff = 128
-    modelspec.inputs.time_repetition = TR  
+    #modelspec.inputs.time_repetition = TR  
     modelspec.inputs.input_units = 'secs'
     modelspec.inputs.output_units = 'secs'
     
@@ -52,7 +52,7 @@ def create_level1_4D_spm12(contrasts, TR = 2.0, deriv1 = False, concat_runs = Tr
     else:
         level1design.inputs.bases  = {'hrf':{'derivs': [0,0]}}  
     
-    level1design.inputs.interscan_interval = TR
+    #level1design.inputs.interscan_interval = TR
     level1design.inputs.timing_units = 'secs'
     
     level1estimate = pe.Node(interface=spm.EstimateModel(), name="level1estimate")
