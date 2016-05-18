@@ -315,10 +315,7 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
             preprocess.connect(sliceTiming, 'timecorrected_files', realign,'in_files')
         else: 
             preprocess.connect(inputnode,'functionals', realign,'in_files')
-    
-    
-    
-    
+
     coregister = pe.Node(interface=spm.Coregister(), name="coregister")
     coregister.inputs.jobtype = 'estimate'
    
