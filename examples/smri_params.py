@@ -22,10 +22,12 @@ else:
     sbj_dir = os.path.join(main_path, "FSF")        # where FS creates sbj dir
     MRI_path = main_path                            # MRI dir
 
+
     if test:
         subjects_list = ['monk0002']  # ['MORYV','SANGA','VANSO','VIRJE']
 
     else:
+
         '''
         subjects_list = ["balai",'benba','casla','doble','droco','duple',
                          'frapa','haimo','laupa','levma','mahan','marle',
