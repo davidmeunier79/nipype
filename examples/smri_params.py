@@ -17,10 +17,10 @@ if getpass.getuser() == 'pasca':
     subjects_list = ['monk0002']  # ['dmn_mri','Monk1'] ['monk0002']  'dmn_mri'
 
 else:
-#    main_path = '/home/karim/Documents/Fanny'           # data dir
-    main_path = '/home/karim/Documents/Blindsight'  # data dir
+    main_path = '/home/karim/Documents/Fanny'           # data dir
+#    main_path = '/home/karim/Documents/Blindsight'  # data dir
     sbj_dir = os.path.join(main_path, "FSF")        # where FS creates sbj dir
-    MRI_path = main_path                            # MRI dir
+    MRI_path = os.path.join(main_path, "MRI")       # MRI dir
 
 
     if test:
@@ -40,7 +40,8 @@ else:
         subjects_list = ['S02','S03', "S04",'S05','S06', "S07",'S08','S09',
                          "S10",'S11','S12', "S13",'S14','S15', "S16"]
         '''
-        subjects_list = ['sbj_1']
+#        subjects_list = ['sbj_1']
+        subjects_list = ['fsaverage']
 
 # dir names in main_path=sbj_dir
 FS_WF_name = "segmentation_workflow"
