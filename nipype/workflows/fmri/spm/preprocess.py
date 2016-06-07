@@ -262,8 +262,9 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
     if nb_scans_to_remove != 0:
         trimming = False
         
-    if trimming == True:
+    if trimming:
             
+        print "Running trimming with {} volums removed".format(nb_scans_to_remove)
         #### trim
         if mult == True:
             trim = pe.MapNode(interface=Trim(), iterfield = ['in_file'],name ="trim")
@@ -271,9 +272,9 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
             trim = pe.Node(interface=Trim(), name="trim")
             
         trim.inputs.begin_index = nb_scans_to_remove
-          
+    
         
-    if slice_timing == True:
+    if slice_timing:
         
         #### sliceTiming
         sliceTiming = pe.Node(interface=spm.SliceTiming(), name="sliceTiming")
@@ -300,17 +301,17 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
     realign = pe.Node(interface=spm.Realign(), name="realign")
     realign.inputs.register_to_mean = True
     
-    if trimming == True:
+    if trimming:
         
         preprocess.connect(inputnode,'functionals',trim,'in_file')
         
-        if slice_timing == True: 
+        if slice_timing: 
             preprocess.connect(trim, 'out_file', sliceTiming,'in_files')
             preprocess.connect(sliceTiming, 'timecorrected_files', realign,'in_files')
         else: 
             preprocess.connect(trim, 'out_file', realign,'in_files')
     else:
-        if slice_timing == True: 
+        if slice_timing: 
             preprocess.connect(inputnode,'functionals', sliceTiming,'in_files')
             preprocess.connect(sliceTiming, 'timecorrected_files', realign,'in_files')
         else: 
@@ -333,10 +334,10 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
    
     segment= pe.Node(interface=spm.Segment(), name="segment")
     
-    if fast_segmenting == True:
+    if fast_segmenting:
         segment.inputs.gaussians_per_class = [1, 1, 1, 4] #(faster execution)
     
-    if output_normalized_segmented_maps == True:
+    if output_normalized_segmented_maps:
         segment.inputs.csf_output_type = [False,True, False]
         segment.inputs.gm_output_type = [False,True, False]
         segment.inputs.wm_output_type = [False,True, False]
@@ -357,15 +358,14 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
     preprocess.connect(coregister,'coregistered_files',normalize_func,'apply_to_files')    
     preprocess.connect(segment,'transformation_mat', normalize_func, 'parameter_file')
     
-    if smoothing == True:
+    if smoothing:
         
         ### smoothing
         smooth = pe.Node(interface=spm.Smooth(), name="smooth")
         smooth.inputs.fwhm = fwhm
         
     
-    ### connect nodes
-    if smoothing == True:
+        ### connect nodes
         preprocess.connect(normalize_func, 'normalized_files',smooth,'in_files')
     
     return preprocess
