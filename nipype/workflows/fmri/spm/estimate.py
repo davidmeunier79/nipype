@@ -21,7 +21,7 @@ from nipype.pipeline.engine import Workflow
 
 
 
-def create_level1_4D_spm12(contrasts, deriv1 = False, concat_runs = True):
+def create_level1_4D_spm12(contrasts, deriv1 = False, concat_runs = True, high_pass_filter_cutoff = 128 ):
 
     l1analysis = pe.Workflow(name='level1_4D_spm12')
     
@@ -35,7 +35,7 @@ def create_level1_4D_spm12(contrasts, deriv1 = False, concat_runs = True):
     
     ##### define nodes         
     modelspec = pe.Node(interface=model.SpecifySPMModel(), name= "modelspec")
-    modelspec.inputs.high_pass_filter_cutoff = 128
+    modelspec.inputs.high_pass_filter_cutoff = high_pass_filter_cutoff
     #modelspec.inputs.time_repetition = TR  
     modelspec.inputs.input_units = 'secs'
     modelspec.inputs.output_units = 'secs'
