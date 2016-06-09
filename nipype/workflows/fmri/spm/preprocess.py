@@ -129,7 +129,7 @@ def create_spm_preproc(name='preproc'):
 
 from nipype.interfaces.nipy.preprocess import Trim
 
-def create_preprocess_struct_to_mean_funct_4D_spm12(TR, wf_name='preprocess_struct_to_mean_funct_4D_spm12',mult = True, fast_segmenting = True,smoothing = False, fwhm = [],slice_timing = False,  num_slices = 40, slice_code = 5, nb_scans_to_remove = 2, trimming = True):
+def create_preprocess_struct_to_mean_funct_4D_spm12(TR, wf_name='preprocess_struct_to_mean_funct_4D_spm12',mult = True, fast_segmenting = True,output_normalized_segmented_maps = True, smoothing = False, fwhm = [],slice_timing = False,  num_slices = 40, slice_code = 5, nb_scans_to_remove = 2, trimming = True):
     
     """ 
     Preprocessing old fashioned normalize struct -> mean funct with SPM12
@@ -197,6 +197,12 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(TR, wf_name='preprocess_stru
     if fast_segmenting == True:
         segment.inputs.gaussians_per_class = [1, 1, 1, 4] #(faster execution)
     
+    
+    if output_normalized_segmented_maps:
+        segment.inputs.csf_output_type = [False,True, False]
+        segment.inputs.gm_output_type = [False,True, False]
+        segment.inputs.wm_output_type = [False,True, False]
+        
     normalize_func = pe.Node(interface=spm.Normalize(), name = "normalize_func")
     normalize_func.inputs.jobtype = 'write'
     
