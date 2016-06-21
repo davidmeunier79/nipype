@@ -21,15 +21,18 @@ from nipype.pipeline.engine import Workflow
 
 
 
-def create_level1_4D_spm12(contrasts, deriv1 = False, concat_runs = True, high_pass_filter_cutoff = 128 ):
+def create_level1_4D_spm12(contrasts,wf_name = 'level1_4D_spm12', deriv1 = False, concat_runs = True, high_pass_filter_cutoff = 128 ):
 
-    l1analysis = pe.Workflow(name='level1_4D_spm12')
+    l1analysis = pe.Workflow(name=wf_name)
     
     #################### inputs ###################
     inputnode = pe.Node(niu.IdentityInterface(fields=['subject_info',
                                                       'functional_runs',
                                                       'realignment_parameters',
-                                                      'time_repetition',]),
+                                                      'time_repetition',
+                                                      'mask',
+                                                      'outlier_files'
+                                                      ]),
                         name='inputnode')
 
     
@@ -55,6 +58,8 @@ def create_level1_4D_spm12(contrasts, deriv1 = False, concat_runs = True, high_p
     #level1design.inputs.interscan_interval = TR
     level1design.inputs.timing_units = 'secs'
     
+    
+    
     level1estimate = pe.Node(interface=spm.EstimateModel(), name="level1estimate")
     level1estimate.inputs.estimation_method = {'Classical' : 1}
     
@@ -68,7 +73,13 @@ def create_level1_4D_spm12(contrasts, deriv1 = False, concat_runs = True, high_p
     l1analysis.connect(inputnode, 'realignment_parameters',modelspec,'realignment_parameters')
     
     l1analysis.connect(inputnode, 'time_repetition',modelspec,'time_repetition')
+    
+    l1analysis.connect(inputnode, 'outlier_files',modelspec,'outlier_files')
+    
     l1analysis.connect(inputnode, 'time_repetition',level1design,'interscan_interval')
+    
+    ### si skullstrip dans le preprocessing
+    l1analysis.connect(inputnode, 'mask',level1design,'mask_image')
     
     ### other nodes
     l1analysis.connect(modelspec,'session_info', level1design,'session_info')
