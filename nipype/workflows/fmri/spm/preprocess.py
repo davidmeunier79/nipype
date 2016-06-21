@@ -5,6 +5,7 @@ import os
 
 import nipype.algorithms.rapidart as ra
 import nipype.interfaces.spm as spm
+import nipype.interfaces.fsl as fsl
 import nipype.interfaces.utility as niu
 import nipype.pipeline.engine as pe
 logger = pe.logger
@@ -384,7 +385,7 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
     
     return preprocess
     
-def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_struct_4D_spm12_art', mult = True, trimming = False, slice_timing = False, fast_segmenting = True, smoothing = False, output_normalized_segmented_maps = False, nb_scans_to_remove = 2, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8],slice_timings = [],ref_timings = -1.0):
+def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_struct_4D_spm12_art', mult = True, trimming = False, slice_timing = False, fast_segmenting = True, smoothing = False, output_normalized_segmented_maps = False, nb_scans_to_remove = 2, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8],slice_timings = [],ref_timings = -1.0, skullstripping = False):
     """ 
     Preprocessing old fashioned normalize funct -> struct with SPM12
     """
@@ -505,18 +506,44 @@ def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_
     preprocess.connect(coregister,'coregistered_files',normalize_func,'apply_to_files')    
     preprocess.connect(segment,'transformation_mat', normalize_func, 'parameter_file')
     
+    ##################### skullstrip ###################
+    
+    if skullstripping:
+            
+        skullstrip = pe.Node(interface=fsl.BET(), name="skullstrip")
+        skullstrip.inputs.mask = True
+
+        preprocess.connect(normalize_struct,'normalized_files',skullstrip,'in_file')
+    
     ################### art ########################
         
     art = pe.Node(interface=ra.ArtifactDetect(), name="art")
     art.inputs.use_differences      = [True, False]
+    
+    ### norm move
     art.inputs.use_norm             = True
     art.inputs.norm_threshold       = 1
+    
+    ### transaltion only
+    #art.inputs.use_norm             = False
+    #art.inputs.translation_threshold       = 3
+    
     art.inputs.zintensity_threshold = 3
-    art.inputs.mask_type            = 'spm_global'
+      
     art.inputs.parameter_source     = 'SPM'
 
-    preprocess.connect(realign,('realignment_parameters'),art,('realignment_parameters'))
-    preprocess.connect(normalize_func,('normalized_files'),art,('realigned_files'))
+    preprocess.connect(realign,'realignment_parameters',art,'realignment_parameters')
+    preprocess.connect(normalize_func,'normalized_files',art,'realigned_files')
+    
+    if skullstripping:
+        
+        art.inputs.mask_type            = 'file'
+        preprocess.connect(skullstrip,'mask_file',art,'mask_file')
+    else:
+        
+        art.inputs.mask_type            = 'spm_global'
+      
+    
     
     #(skullstrip,art,[('mask_file','mask_file')]),
     
