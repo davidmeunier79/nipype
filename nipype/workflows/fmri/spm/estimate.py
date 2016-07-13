@@ -92,3 +92,96 @@ def create_level1_4D_spm12(contrasts,wf_name = 'level1_4D_spm12', deriv1 = False
 
     return l1analysis
     
+def create_level2_one_sample_ttest_spm12(wf_name = "level2_one_sample_test")
+
+    
+    l2Analysis = pe.Workflow(name=wf_name)
+    
+    #################### inputs ###################
+    inputnode = pe.Node(niu.IdentityInterface(fields=['group_con_files']),
+                        name='inputnode')
+
+    #### One-sample T test (difference to zeros)
+    l2Ttester = pe.Node(interface = spm.OneSampleTTestDesign(), name = 'l2Ttester')
+    
+    l2Analysis.connect(inputnode ,'group_con_files',l2Ttester,'in_files')
+    #l2Analysis.connect(l2DataSource ,'con',l2Ttester,'group1_files')
+    
+    #### estimate model
+
+    l2Estimttest = pe.Node(interface = spm.EstimateModel(), name = 'l2Estimttest')
+    l2Estimttest.inputs.estimation_method = {'Classical':1}
+    
+    l2Analysis.connect(l2Ttester,'spm_mat_file',l2Estimttest,'spm_mat_file')
+    
+    
+    
+    #### contrast estimate
+    l2Conest = pe.Node(interface = spm.EstimateContrast(), name = 'l2Conest')
+    cont1 = ('Group','T', ['mean'],[1])
+    l2Conest.inputs.contrasts = [cont1]        
+    l2Conest.inputs.group_contrast = True
+
+    l2Analysis.connect(l2Estimttest,'spm_mat_file',l2Conest,'spm_mat_file')
+    l2Analysis.connect(l2Estimttest,'residual_image',l2Conest,'residual_image')
+    l2Analysis.connect(l2Estimttest,'beta_images',l2Conest,'beta_images')
+    
+    #### datasink SPM.matlab_spm_path
+    
+    #### datasink
+    l2datasink_SPM_contrasts = pe.Node(interface=nio.DataSink(), name="l2datasink_SPM_contrasts")
+    l2datasink_SPM_contrasts.inputs.base_directory = os.path.join(main_path,l2_analysis_name)
+    
+    l2datasink_SPM_contrasts.inputs.container = 'level2_results_SPM_contrasts'
+
+    l2Analysis.connect(l2Conest,'spm_mat_file',l2datasink_SPM_contrasts,'l2_contrasts.@spm_mat')
+    l2Analysis.connect(l2Conest,'spmT_images',l2datasink_SPM_contrasts,'l2_contrasts.@T')
+    l2Analysis.connect(l2Conest,'con_images',l2datasink_SPM_contrasts,'l2_contrasts.@con')
+        
+    return l2Analysis
+
+def create_level2_two_sample_ttest_spm12(wf_name = "level2_two_sample_test")
+
+    
+    l2Analysis = pe.Workflow(name=wf_name)
+    
+    #################### inputs ###################
+    inputnode = pe.Node(niu.IdentityInterface(fields=['group1_con_files','group2_con_files']),
+                        name='inputnode')
+
+
+    ##### Two-sample T test (difference between groups)
+    l2Ttester = pe.Node(interface = spm.TwoSampleTTestDesign(), name = 'l2Ttester')
+    
+    l2Analysis.connect(inputnode ,'group1_con_files',l2Ttester,'group1_files')
+    l2Analysis.connect(inputnode ,'group2_con_files',l2Ttester,'group2_files')
+    
+    ##### estimate model
+
+    l2Estimttest = pe.Node(interface = spm.EstimateModel(), name = 'l2Estimttest')
+    l2Estimttest.inputs.estimation_method = {'Classical':1}
+    
+    l2Analysis.connect(l2Ttester,'spm_mat_file',l2Estimttest,'spm_mat_file')
+    
+    
+    
+    #### contrast estimate
+    l2Conest = pe.Node(interface = spm.EstimateContrast(), name = 'l2Conest')
+    
+
+    ### Group level
+    cont_group1 = ('Group_1','T', ['Group_{1}'],[1])
+    cont_group2 = ('Group_2','T', ['Group_{2}'],[1])
+
+    ### Group comparison
+    cont_group3 = ('Group_1>Group_2','T',['Group_{1}','Group_{2}'],[1,-1])
+    cont_group4 = ('Group_2>Group_1','T',['Group_{1}','Group_{2}'],[-1,1])
+
+    l2Conest.inputs.contrasts = [cont_group1,cont_group2,cont_group3,cont_group4]
+    l2Conest.inputs.group_contrast = True
+
+    l2Analysis.connect(l2Estimttest,'spm_mat_file',l2Conest,'spm_mat_file')
+    l2Analysis.connect(l2Estimttest,'residual_image',l2Conest,'residual_image')
+    l2Analysis.connect(l2Estimttest,'beta_images',l2Conest,'beta_images')
+    
+    return l2Analysis
