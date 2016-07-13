@@ -92,7 +92,7 @@ def create_level1_4D_spm12(contrasts,wf_name = 'level1_4D_spm12', deriv1 = False
 
     return l1analysis
     
-def create_level2_one_sample_ttest_spm12(wf_name = "level2_one_sample_test")
+def create_level2_one_sample_ttest_spm12(wf_name = "level2_one_sample_test"):
 
     
     l2Analysis = pe.Workflow(name=wf_name)
@@ -140,7 +140,7 @@ def create_level2_one_sample_ttest_spm12(wf_name = "level2_one_sample_test")
         
     return l2Analysis
 
-def create_level2_two_sample_ttest_spm12(wf_name = "level2_two_sample_test")
+def create_level2_two_sample_ttest_spm12(wf_name = "level2_two_sample_test"):
 
     
     l2Analysis = pe.Workflow(name=wf_name)
