@@ -266,7 +266,7 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
                                                       'struct']),
                         name='inputnode')
      
-    if nb_scans_to_remove != 0:
+    if nb_scans_to_remove == 0:
         trimming = False
         
     if trimming:
@@ -396,7 +396,7 @@ def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_
                                                       'struct']),
                         name='inputnode')
      
-    if nb_scans_to_remove != 0:
+    if nb_scans_to_remove == 0:
         trimming = False
         
     if trimming:
