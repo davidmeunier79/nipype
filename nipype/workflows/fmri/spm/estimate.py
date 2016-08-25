@@ -42,7 +42,6 @@ def create_level1_4D_spm12(contrasts,wf_name = 'level1_4D_spm12', deriv1 = False
     ##### define nodes         
     modelspec = pe.Node(interface=model.SpecifySPMModel(), name= "modelspec")
     modelspec.inputs.high_pass_filter_cutoff = high_pass_filter_cutoff
-    #modelspec.inputs.time_repetition = TR  
     modelspec.inputs.input_units = 'secs'
     modelspec.inputs.output_units = 'secs'
     
@@ -58,7 +57,6 @@ def create_level1_4D_spm12(contrasts,wf_name = 'level1_4D_spm12', deriv1 = False
     else:
         level1design.inputs.bases  = {'hrf':{'derivs': [0,0]}}  
     
-    #level1design.inputs.interscan_interval = TR
     level1design.inputs.timing_units = 'secs'
     
     
@@ -69,6 +67,9 @@ def create_level1_4D_spm12(contrasts,wf_name = 'level1_4D_spm12', deriv1 = False
     contrastestimate = pe.Node(interface = spm.EstimateContrast(), name="contrastestimate")
     contrastestimate.inputs.contrasts = contrasts 
     
+    if deriv1 == True:
+        contrastestimate.inputs.use_derivs = True
+        
     #### connect nodes
     ### from inputnode
     l1analysis.connect(inputnode, 'subject_info', modelspec, 'subject_info')
@@ -77,6 +78,7 @@ def create_level1_4D_spm12(contrasts,wf_name = 'level1_4D_spm12', deriv1 = False
     
     l1analysis.connect(inputnode, 'time_repetition',modelspec,'time_repetition')
     
+    ### si art dans le preprocessing
     l1analysis.connect(inputnode, 'outlier_files',modelspec,'outlier_files')
     
     l1analysis.connect(inputnode, 'time_repetition',level1design,'interscan_interval')
