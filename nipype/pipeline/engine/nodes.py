@@ -15,6 +15,8 @@ The `Node` class provides core functionality for batch processing.
 
 """
 
+from __future__ import absolute_import
+
 from future import standard_library
 standard_library.install_aliases()
 from builtins import range
@@ -55,7 +57,8 @@ logger = logging.getLogger('workflow')
 from ...interfaces.base import (traits, InputMultiPath, CommandLine,
                                 Undefined, TraitedSpec, DynamicTraitedSpec,
                                 Bunch, InterfaceResult, md5, Interface,
-                                TraitDictObject, TraitListObject, isdefined)
+                                TraitDictObject, TraitListObject, isdefined,
+                                runtime_profile)
 from ...utils.misc import (getsource, create_function_from_source,
                            flatten, unflatten)
 from ...utils.filemanip import (save_json, FileNotFoundError,
@@ -737,15 +740,21 @@ class Node(EngineBase):
                 fp.close()
                 return
             fp.writelines(write_rst_header('Runtime info', level=1))
+            # Init rst dictionary of runtime stats
+            rst_dict = {'hostname' : self.result.runtime.hostname,
+                        'duration' : self.result.runtime.duration}
+            # Try and insert memory/threads usage if available
+            if runtime_profile:
+                try:
+                    rst_dict['runtime_memory_gb'] = self.result.runtime.runtime_memory_gb
+                    rst_dict['runtime_threads'] = self.result.runtime.runtime_threads
+                except AttributeError:
+                    logger.info('Runtime memory and threads stats unavailable')
             if hasattr(self.result.runtime, 'cmdline'):
-                fp.writelines(write_rst_dict(
-                    {'hostname': self.result.runtime.hostname,
-                     'duration': self.result.runtime.duration,
-                     'command': self.result.runtime.cmdline}))
+                rst_dict['command'] = self.result.runtime.cmdline
+                fp.writelines(write_rst_dict(rst_dict))
             else:
-                fp.writelines(write_rst_dict(
-                    {'hostname': self.result.runtime.hostname,
-                     'duration': self.result.runtime.duration}))
+                fp.writelines(write_rst_dict(rst_dict))
             if hasattr(self.result.runtime, 'merged'):
                 fp.writelines(write_rst_header('Terminal output', level=2))
                 fp.writelines(write_rst_list(self.result.runtime.merged))
@@ -1151,7 +1160,8 @@ class MapNode(Node):
                 if str2bool(self.config['execution']['stop_on_first_crash']):
                     self._result = node.result
                     raise
-            yield i, node, err
+            finally:
+                yield i, node, err
 
     def _collate_results(self, nodes):
         self._result = InterfaceResult(interface=[], runtime=[],

@@ -15,6 +15,8 @@ The `Workflow` class provides core functionality for batch processing.
 
 """
 
+from __future__ import absolute_import
+
 from future import standard_library
 standard_library.install_aliases()
 from builtins import range
@@ -644,7 +646,13 @@ connected.
                                            value=1))
         save_json(graph_file, json_dict)
         graph_file = op.join(report_dir, 'graph.json')
-        template = '%%0%dd_' % np.ceil(np.log10(len(nodes))).astype(int)
+        # Avoid RuntimeWarning: divide by zero encountered in log10
+        num_nodes = len(nodes)
+        if num_nodes > 0:
+           index_name = np.ceil(np.log10(num_nodes)).astype(int)
+        else:
+            index_name = 0
+        template = '%%0%dd_' % index_name
 
         def getname(u, i):
             name_parts = u.fullname.split('.')
@@ -684,7 +692,7 @@ connected.
             node.input_source = {}
             for edge in graph.in_edges_iter(node):
                 data = graph.get_edge_data(*edge)
-                for sourceinfo, field in sorted(data['connect']):
+                for sourceinfo, field in data['connect']:
                     node.input_source[field] = \
                         (op.join(edge[0].output_dir(),
                                  'result_%s.pklz' % edge[0].name),
