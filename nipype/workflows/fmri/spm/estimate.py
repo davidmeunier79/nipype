@@ -24,7 +24,7 @@ from nipype.pipeline.engine import Workflow
 
 
 
-def create_level1_4D_spm12(contrasts,wf_name = 'level1_4D_spm12', deriv1 = False, concat_runs = True, high_pass_filter_cutoff = 128 ):
+def create_level1_4D_spm12(contrasts,wf_name = 'level1_4D_spm12', deriv1 = False, concat_runs = True, high_pass_filter_cutoff = 128, model_serial_correlations = "none",global_intensity_normalization = 'none' ):
 
     l1analysis = pe.Workflow(name=wf_name)
     
@@ -59,7 +59,8 @@ def create_level1_4D_spm12(contrasts,wf_name = 'level1_4D_spm12', deriv1 = False
     
     level1design.inputs.timing_units = 'secs'
     
-    
+    level1design.inputs.model_serial_correlations = model_serial_correlations
+    level1design.inputs.global_intensity_normalization = global_intensity_normalization
     
     level1estimate = pe.Node(interface=spm.EstimateModel(), name="level1estimate")
     level1estimate.inputs.estimation_method = {'Classical' : 1}
