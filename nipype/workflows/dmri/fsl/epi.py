@@ -740,8 +740,14 @@ def _dilate_mask(in_file, iterations=4):
     import nibabel as nib
     import scipy.ndimage as ndimage
     import os
+    
+    print in_file
+    
     img = nib.load(in_file)
-    img._data = ndimage.binary_dilation(img.get_data(), iterations=iterations)
+    
+    print img.get_data().shape
+    
+    img.data = ndimage.binary_dilation(img.get_data(), iterations=iterations)
 
     name, fext = os.path.splitext(os.path.basename(in_file))
     if fext == '.gz':
@@ -778,7 +784,7 @@ def _vsm_remove_mean(in_file, mask_file, in_unwarped):
     img_data[msk == 0] = 0
     vsmmag_masked = ma.masked_values(img_data.reshape(-1), 0.0)
     vsmmag_masked = vsmmag_masked - vsmmag_masked.mean()
-    img._data = vsmmag_masked.reshape(img.get_shape())
+    img.data = vsmmag_masked.reshape(img.get_shape())
     name, fext = os.path.splitext(os.path.basename(in_file))
     if fext == '.gz':
         name, _ = os.path.splitext(name)
