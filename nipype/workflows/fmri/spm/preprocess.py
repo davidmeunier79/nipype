@@ -564,6 +564,131 @@ def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_
     
     
 
+def create_preprocess_funct_4D_spm12_art(wf_name='create_preprocess_funct_4D_spm12_art', mult = True, trimming = False, slice_timing = False, smoothing = False,  nb_scans_to_remove = 2, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8],slice_timings = [],ref_timings = -1.0, norm_template_file):
+    """ 
+    Preprocessing old fashioned normalize funct -> struct with SPM12
+    """
+    preprocess = pe.Workflow(name=wf_name)
+
+    
+    inputnode = pe.Node(niu.IdentityInterface(fields=['functionals']),
+                        name='inputnode')
+     
+    if nb_scans_to_remove == 0:
+        trimming = False
+        
+    if trimming:
+            
+        print "Running trimming with {} volums removed".format(nb_scans_to_remove)
+        #### trim
+        if mult == True:
+            trim = pe.MapNode(interface=Trim(), iterfield = ['in_file'],name ="trim")
+        else:
+            trim = pe.Node(interface=Trim(), name="trim")
+            
+        trim.inputs.begin_index = nb_scans_to_remove
+    
+        
+    if slice_timing:
+        
+        #### sliceTiming
+        sliceTiming = pe.Node(interface=spm.SliceTiming(), name="sliceTiming")
+        sliceTiming.inputs.num_slices = num_slices
+        sliceTiming.inputs.time_repetition = TR
+        sliceTiming.inputs.time_acquisition = TR - TR/num_slices
+        
+        if slice_code == 5:  #for Siemens-even interleaved ascending
+                
+    
+            sliceTiming.inputs.slice_order = range(2,num_slices+1,2) + range(1,num_slices+1,2)      #for Siemens-even interleaved ascending 
+            #sliceTiming.inputs.ref_slice = num_slices-1
+            sliceTiming.inputs.ref_slice = num_slices ### a verifier...
+                
+        elif slice_code == 2:  #for Siemens sequential_decreasing
+                
+            sliceTiming.inputs.slice_order = range(num_slices,0,-1)
+            sliceTiming.inputs.ref_slice = int(num_slices/2.0)
+            
+        elif slice_code == -1: 
+            ### Attention, timing de chaque slice et non ordre d'acquisition des slices
+            ### utilise pour faire du slice_timing avec une aquisition multiband
+            
+            print "Running multiband slice timing...experimental"
+            
+            if len(slice_timings) != 0:
+                sliceTiming.inputs.slice_order = slice_timings
+                sliceTiming.inputs.ref_slice = ref_timings
+            
+    ##### realign
+    realign = pe.Node(interface=spm.Realign(), name="realign")
+    realign.inputs.register_to_mean = True
+    
+    if trimming:
+        
+        preprocess.connect(inputnode,'functionals',trim,'in_file')
+        
+        if slice_timing: 
+            preprocess.connect(trim, 'out_file', sliceTiming,'in_files')
+            preprocess.connect(sliceTiming, 'timecorrected_files', realign,'in_files')
+        else: 
+            preprocess.connect(trim, 'out_file', realign,'in_files')
+    else:
+        if slice_timing: 
+            preprocess.connect(inputnode,'functionals', sliceTiming,'in_files')
+            preprocess.connect(sliceTiming, 'timecorrected_files', realign,'in_files')
+        else: 
+            preprocess.connect(inputnode,'functionals', realign,'in_files')
+
+    
+    #### normalize_func
+    normalize_func = pe.Node(interface=spm.Normalize(), name = "normalize_func")
+    normalize_func.inputs.jobtype = 'estwrite'
+    normalize_func.inputs.template = norm_template_file
+    
+    
+    #### smooth
+    smooth = pe.Node(interface=spm.Smooth(), name="smooth")
+    smooth.inputs.fwhm = fwhm
+    
+    ### connecting nodes
+    preprocess.connect(realign,'mean_image',normalize_func,'source')
+    preprocess.connect(realign, 'realigned_files', normalize_func, 'apply_to_files')
+    
+    ################### art ########################
+        
+    art = pe.Node(interface=ra.ArtifactDetect(), name="art")
+    art.inputs.use_differences      = [True, False]
+    
+    ### norm move
+    art.inputs.use_norm             = True
+    art.inputs.norm_threshold       = 1
+    
+    ### transaltion only
+    #art.inputs.use_norm             = False
+    #art.inputs.translation_threshold       = 3
+    
+    art.inputs.zintensity_threshold = 3
+      
+    art.inputs.parameter_source     = 'SPM'
+
+    preprocess.connect(realign,'realignment_parameters',art,'realignment_parameters')
+    preprocess.connect(normalize_func,'normalized_files',art,'realigned_files')
+    
+    art.inputs.mask_type            = 'spm_global'
+          
+    if smoothing:
+        
+        ### smoothing
+        smooth = pe.Node(interface=spm.Smooth(), name="smooth")
+        smooth.inputs.fwhm = fwhm
+        
+    
+        ### connect nodes
+        preprocess.connect(normalize_func, 'normalized_files',smooth,'in_files')
+    
+    return preprocess
+    
+
 def create_preprocess_funct_4D_spm8(norm_template_file,wf_name='preprocess_funct_4D_spm8', TR = 2.0, num_slices = 40, slice_code = 5,fwhm = [7.5,7.5,8]):
     
     """
