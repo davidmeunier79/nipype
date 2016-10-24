@@ -564,7 +564,7 @@ def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_
     
     
 
-def create_preprocess_funct_4D_spm12_art(wf_name='create_preprocess_funct_4D_spm12_art', mult = True, trimming = False, slice_timing = False, smoothing = False,  nb_scans_to_remove = 2, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8],slice_timings = [],ref_timings = -1.0, norm_template_file):
+def create_preprocess_funct_4D_spm12_art(norm_template_file, wf_name='create_preprocess_funct_4D_spm12_art', mult = True, trimming = False, slice_timing = False, smoothing = False,  nb_scans_to_remove = 2, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8],slice_timings = [],ref_timings = -1.0):
     """ 
     Preprocessing old fashioned normalize funct -> struct with SPM12
     """
