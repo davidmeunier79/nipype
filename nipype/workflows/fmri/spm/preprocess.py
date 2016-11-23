@@ -3,6 +3,7 @@
 
 import os
 
+from ....algorithms.misc import Gunzip
 from ....algorithms import rapidart as ra
 from ....interfaces import spm as spm
 from ....interfaces import utility as niu
@@ -10,6 +11,9 @@ from ....pipeline import engine as pe
 
 from ....interfaces.matlab import no_matlab
 from ...smri.freesurfer.utils import create_getmask_flow
+
+
+from nipype.utils.misc import get_first
 
 from .... import logging
 logger = logging.getLogger('workflow')
@@ -257,7 +261,7 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(TR, wf_name='preprocess_stru
     
     
 
-def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_struct_4D_spm12', mult = True, trimming = False, slice_timing = False, fast_segmenting = True, smoothing = False, output_normalized_segmented_maps = False, nb_scans_to_remove = 2, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8],slice_timings = [],ref_timings = -1.0):
+def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_struct_4D_spm12', mult = True, trimming = False, slice_timing = False, fast_segmenting = True, smoothing = False, output_normalized_segmented_maps = False, nb_scans_to_remove = 2, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8],slice_timings = [],ref_timings = -1.0, normalize12 = False):
     """ 
     Preprocessing old fashioned normalize funct -> struct with SPM12
     """
@@ -341,40 +345,46 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
     preprocess.connect(realign,'mean_image',coregister,'source')
     preprocess.connect(realign,'realigned_files',coregister,'apply_to_files')
     
-    ############ SPM12 (Normalize12)
-    #normalize = pe.Node(interface=spm.Normalize12(), name = "normalize")
-    #normalize.inputs.jobtype = 'write'
-    
-    #preprocess.connect(coregister,'coregistered_files',normalize,'apply_to_files') ##SPM12 Normalize12
-    
-    ############ Old fashionned segment with SPM12
-   
-    segment= pe.Node(interface=spm.Segment(), name="segment")
-    
-    if fast_segmenting:
-        segment.inputs.gaussians_per_class = [1, 1, 1, 4] #(faster execution)
-    
-    if output_normalized_segmented_maps:
-        segment.inputs.csf_output_type = [False,True, False]
-        segment.inputs.gm_output_type = [False,True, False]
-        segment.inputs.wm_output_type = [False,True, False]
+    if normalize12:
+            
+        ############ SPM12 (Normalize12)
+        normalize = pe.Node(interface=spm.Normalize12(), name = "normalize")
+        normalize.inputs.jobtype = 'write'
         
-    preprocess.connect(inputnode, 'struct', segment,'data')
+        preprocess.connect(inputnode, 'struct',normalize12,'image_to_align')
+        
+        preprocess.connect(coregister,'coregistered_files',normalize12,'apply_to_files') ##SPM12 Normalize12
+        
+    else:
+            
+        ########### Old fashionned segment with SPM12
     
-    ### normalise struct to MNI using segement transformation_matrix
-    normalize_struct = pe.Node(interface=spm.Normalize(), name = "normalize_struct")
-    normalize_struct.inputs.jobtype = 'write'
-    
-    preprocess.connect(inputnode, 'struct', normalize_struct,'apply_to_files')    
-    preprocess.connect(segment,'transformation_mat', normalize_struct, 'parameter_file')
-    
-    ### normalise functionals to MNI using segement transformation_matrix
-    normalize_func = pe.Node(interface=spm.Normalize(), name = "normalize_func")
-    normalize_func.inputs.jobtype = 'write'
-    
-    preprocess.connect(coregister,'coregistered_files',normalize_func,'apply_to_files')    
-    preprocess.connect(segment,'transformation_mat', normalize_func, 'parameter_file')
-    
+        segment= pe.Node(interface=spm.Segment(), name="segment")
+        
+        if fast_segmenting:
+            segment.inputs.gaussians_per_class = [1, 1, 1, 4] #(faster execution)
+        
+        if output_normalized_segmented_maps:
+            segment.inputs.csf_output_type = [False,True, False]
+            segment.inputs.gm_output_type = [False,True, False]
+            segment.inputs.wm_output_type = [False,True, False]
+            
+        preprocess.connect(inputnode, 'struct', segment,'data')
+        
+        ### normalise struct to MNI using segement transformation_matrix
+        normalize_struct = pe.Node(interface=spm.Normalize(), name = "normalize_struct")
+        normalize_struct.inputs.jobtype = 'write'
+        
+        preprocess.connect(inputnode, 'struct', normalize_struct,'apply_to_files')    
+        preprocess.connect(segment,'transformation_mat', normalize_struct, 'parameter_file')
+        
+        ### normalise functionals to MNI using segement transformation_matrix
+        normalize_func = pe.Node(interface=spm.Normalize(), name = "normalize_func")
+        normalize_func.inputs.jobtype = 'write'
+        
+        preprocess.connect(coregister,'coregistered_files',normalize_func,'apply_to_files')    
+        preprocess.connect(segment,'transformation_mat', normalize_func, 'parameter_file')
+        
     if smoothing:
         
         ### smoothing
@@ -383,11 +393,14 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
         
     
         ### connect nodes
-        preprocess.connect(normalize_func, 'normalized_files',smooth,'in_files')
+        if normalize12:
+            preprocess.connect(normalize12, 'normalized_files',smooth,'in_files')
+        else:
+            preprocess.connect(normalize_func, 'normalized_files',smooth,'in_files')
     
     return preprocess
     
-def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_struct_4D_spm12_art', mult = True, trimming = False, slice_timing = False, fast_segmenting = True, smoothing = False, output_normalized_segmented_maps = False, nb_scans_to_remove = 2, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8],slice_timings = [],ref_timings = -1.0, skullstripping = False):
+def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_struct_4D_spm12_art', mult = True, trimming = False, slice_timing = False, fast_segmenting = True, smoothing = False, output_normalized_segmented_maps = False, nb_scans_to_remove = 2, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8],slice_timings = [],ref_timings = -1.0, skullstripping = False, normalize12 = False):
     """ 
     Preprocessing old fashioned normalize funct -> struct with SPM12
     """
@@ -395,7 +408,7 @@ def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_
 
     
     inputnode = pe.Node(niu.IdentityInterface(fields=['functionals',
-                                                      'struct']),
+                                                      'struct','brain_mask']),
                         name='inputnode')
      
     if nb_scans_to_remove == 0:
@@ -474,48 +487,60 @@ def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_
     preprocess.connect(realign,'mean_image',coregister,'source')
     preprocess.connect(realign,'realigned_files',coregister,'apply_to_files')
     
-    ############ SPM12 (Normalize12)
-    #normalize = pe.Node(interface=spm.Normalize12(), name = "normalize")
-    #normalize.inputs.jobtype = 'write'
     
-    #preprocess.connect(coregister,'coregistered_files',normalize,'apply_to_files') ##SPM12 Normalize12
-    
-    ############ Old fashionned segment with SPM12
-   
-    segment= pe.Node(interface=spm.Segment(), name="segment")
-    
-    if fast_segmenting:
-        segment.inputs.gaussians_per_class = [1, 1, 1, 4] #(faster execution)
-    
-    if output_normalized_segmented_maps:
-        segment.inputs.csf_output_type = [False,True, False]
-        segment.inputs.gm_output_type = [False,True, False]
-        segment.inputs.wm_output_type = [False,True, False]
-        
-    preprocess.connect(inputnode, 'struct', segment,'data')
-    
-    ### normalise struct to MNI using segement transformation_matrix
-    normalize_struct = pe.Node(interface=spm.Normalize(), name = "normalize_struct")
-    normalize_struct.inputs.jobtype = 'write'
-    
-    preprocess.connect(inputnode, 'struct', normalize_struct,'apply_to_files')    
-    preprocess.connect(segment,'transformation_mat', normalize_struct, 'parameter_file')
-    
-    ### normalise functionals to MNI using segement transformation_matrix
-    normalize_func = pe.Node(interface=spm.Normalize(), name = "normalize_func")
-    normalize_func.inputs.jobtype = 'write'
-    
-    preprocess.connect(coregister,'coregistered_files',normalize_func,'apply_to_files')    
-    preprocess.connect(segment,'transformation_mat', normalize_func, 'parameter_file')
-    
-    ##################### skullstrip ###################
-    
-    if skullstripping:
+    if normalize12:
             
-        skullstrip = pe.Node(interface=fsl.BET(), name="skullstrip")
-        skullstrip.inputs.mask = True
-
-        preprocess.connect(normalize_struct,'normalized_files',skullstrip,'in_file')
+        ############ SPM12 (Normalize12)
+        normalize = pe.Node(interface=spm.Normalize12(), name = "normalize")
+        normalize.inputs.jobtype = 'estwrite'
+        
+        preprocess.connect(inputnode, 'struct',normalize,'image_to_align')
+        #preprocess.connect(realign,'mean_image',normalize,'image_to_align')
+        
+        preprocess.connect(coregister,'coregistered_files',normalize,'apply_to_files') ##SPM12 Normalize12
+        
+    else:
+            
+        ########### Old fashionned segment with SPM12
+    
+        segment= pe.Node(interface=spm.Segment(), name="segment")
+        
+        if fast_segmenting:
+            segment.inputs.gaussians_per_class = [1, 1, 1, 4] #(faster execution)
+        
+        if output_normalized_segmented_maps:
+            segment.inputs.csf_output_type = [False,True, False]
+            segment.inputs.gm_output_type = [False,True, False]
+            segment.inputs.wm_output_type = [False,True, False]
+            
+        preprocess.connect(inputnode, 'struct', segment,'data')
+        
+        ### normalise struct to MNI using segement transformation_matrix
+        normalize_struct = pe.Node(interface=spm.Normalize(), name = "normalize_struct")
+        normalize_struct.inputs.jobtype = 'write'
+        
+        preprocess.connect(inputnode, 'struct', normalize_struct,'apply_to_files')    
+        preprocess.connect(segment,'transformation_mat', normalize_struct, 'parameter_file')
+        
+        ### normalise functionals to MNI using segement transformation_matrix
+        normalize_func = pe.Node(interface=spm.Normalize(), name = "normalize_func")
+        normalize_func.inputs.jobtype = 'write'
+        
+        preprocess.connect(coregister,'coregistered_files',normalize_func,'apply_to_files')    
+        preprocess.connect(segment,'transformation_mat', normalize_func, 'parameter_file')
+        
+    if smoothing:
+        
+        ### smoothing
+        smooth = pe.Node(interface=spm.Smooth(), name="smooth")
+        smooth.inputs.fwhm = fwhm
+        
+    
+        ### connect nodes
+        if normalize12:
+            preprocess.connect(normalize, 'normalized_files',smooth,'in_files')
+        else:
+            preprocess.connect(normalize_func, 'normalized_files',smooth,'in_files')
     
     ################### art ########################
         
@@ -535,32 +560,58 @@ def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_
     art.inputs.parameter_source     = 'SPM'
 
     preprocess.connect(realign,'realignment_parameters',art,'realignment_parameters')
-    preprocess.connect(normalize_func,'normalized_files',art,'realigned_files')
+    
+
+    if normalize12:
+        preprocess.connect(normalize, 'normalized_files',art,'realigned_files')
+    else:
+        preprocess.connect(normalize_func,'normalized_files',art,'realigned_files')
     
     if skullstripping:
-        
         art.inputs.mask_type            = 'file'
-        preprocess.connect(skullstrip,'mask_file',art,'mask_file')
-    else:
         
+        ########## unzip optiBet mask
+        gunzip = pe.Node(interface = Gunzip(), name = 'gunzip')
+        
+        preprocess.connect(inputnode,'brain_mask',gunzip,'in_file')
+        
+        
+        ############ reslicing mask to functional images
+        reslice = pe.Node(interface = spm.Reslice(), name = 'reslice')
+        
+        preprocess.connect(gunzip,'out_file',reslice,'in_file')
+        
+        
+        
+        if normalize12:
+            preprocess.connect(normalize, ('normalized_files',get_first) ,reslice,'space_defining')
+            
+        else:
+            preprocess.connect(normalize_func,('normalized_files',get_first) ,reslice,'space_defining')
+        
+        
+        preprocess.connect(reslice,'out_file',art,'mask_file')
+        
+        
+        #reslice_to_ref = pe.Node(interface = spm.ResliceToReference(), name = 'reslice_to_ref')
+        
+        #preprocess.connect(gunzip,'out_file',reslice_to_ref,'target')
+        
+        #if normalize12:
+            #preprocess.connect(normalize, 'normalized_files',reslice_to_ref,'in_files')
+            
+        #else:
+            #preprocess.connect(normalize_func,'normalized_files',reslice_to_ref,'in_files')
+        
+        #preprocess.connect(reslice_to_ref,'out_files',art,'mask_file')
+        
+        
+        
+    else:
         art.inputs.mask_type            = 'spm_global'
       
-    
-    
-    #(skullstrip,art,[('mask_file','mask_file')]),
-    
-    
-    if smoothing:
-        
-        ### smoothing
-        smooth = pe.Node(interface=spm.Smooth(), name="smooth")
-        smooth.inputs.fwhm = fwhm
-        
-    
-        ### connect nodes
-        preprocess.connect(normalize_func, 'normalized_files',smooth,'in_files')
-    
     return preprocess
+    
     
     
 
