@@ -603,12 +603,8 @@ def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_fun
     """
     preprocess = pe.Workflow(name=wf_name)
 
+    inputnode = pe.Node(niu.IdentityInterface(fields=['functionals','struct','mean_functional','rps','brain_mask']),name='inputnode')
 
-    inputnode = pe.Node(niu.IdentityInterface(fields=['functionals',
-                                                        'struct','mean_functional','rps','brain_mask']),
-                        name='inputnode')
-
-    
     if trimming:
         
         if mult == True:    
@@ -705,8 +701,6 @@ def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_fun
         
         art.inputs.mask_type            = 'file'
         
-        art.inputs.mask_type            = 'file'
-        
         ########## unzip optiBet mask
         gunzip = pe.Node(interface = Gunzip(), name = 'gunzip')
         
@@ -717,16 +711,9 @@ def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_fun
         reslice = pe.Node(interface = spm.Reslice(), name = 'reslice')
         
         preprocess.connect(gunzip,'out_file',reslice,'in_file')
-        
-        
-        
-        if normalize12:
-            preprocess.connect(normalize, ('normalized_files',get_first) ,reslice,'space_defining')
-            
-        else:
-            preprocess.connect(normalize_func,('normalized_files',get_first) ,reslice,'space_defining')
-        
-        
+        preprocess.connect(coregister, ('coregistered_files',get_first) ,reslice,'space_defining')
+           
+        ############ defining for mask for art 
         preprocess.connect(reslice,'out_file',art,'mask_file')
         
     else:
