@@ -22,9 +22,7 @@ from nipype.pipeline.engine import Workflow
 
 
 
-
-
-def create_level1_4D_spm12(contrasts,wf_name = 'level1_4D_spm12', deriv1 = False, concat_runs = True, high_pass_filter_cutoff = 128, model_serial_correlations = "none",global_intensity_normalization = 'none' ):
+def create_level1_4D_spm12(wf_name = 'level1_4D_spm12', deriv1 = False, concat_runs = True, high_pass_filter_cutoff = 128, model_serial_correlations = "none",global_intensity_normalization = 'none' ):
 
     l1analysis = pe.Workflow(name=wf_name)
     
@@ -33,8 +31,9 @@ def create_level1_4D_spm12(contrasts,wf_name = 'level1_4D_spm12', deriv1 = False
                                                       'functional_runs',
                                                       'realignment_parameters',
                                                       'time_repetition',
-                                                      'mask',
-                                                      'outlier_files'
+                                                      'contrasts',
+                                                      'outlier_files',
+                                                      'brain_mask'
                                                       ]),
                         name='inputnode')
 
@@ -51,7 +50,7 @@ def create_level1_4D_spm12(contrasts,wf_name = 'level1_4D_spm12', deriv1 = False
         modelspec.inputs.concatenate_runs = False
         
     level1design = pe.Node(interface=spm.Level1Design(), name= "level1design")
-    
+     
     if deriv1 == True:
         level1design.inputs.bases  = {'hrf':{'derivs': [1,0]}}
     else:
@@ -66,7 +65,8 @@ def create_level1_4D_spm12(contrasts,wf_name = 'level1_4D_spm12', deriv1 = False
     level1estimate.inputs.estimation_method = {'Classical' : 1}
     
     contrastestimate = pe.Node(interface = spm.EstimateContrast(), name="contrastestimate")
-    contrastestimate.inputs.contrasts = contrasts 
+    l1analysis.connect(inputnode, 'contrasts', contrastestimate, 'contrasts')
+    
     
     if deriv1 == True:
         contrastestimate.inputs.use_derivs = True
@@ -78,17 +78,16 @@ def create_level1_4D_spm12(contrasts,wf_name = 'level1_4D_spm12', deriv1 = False
     l1analysis.connect(inputnode, 'realignment_parameters',modelspec,'realignment_parameters')
     
     l1analysis.connect(inputnode, 'time_repetition',modelspec,'time_repetition')
-    
-    ### si art dans le preprocessing
     l1analysis.connect(inputnode, 'outlier_files',modelspec,'outlier_files')
+    
     
     l1analysis.connect(inputnode, 'time_repetition',level1design,'interscan_interval')
     
-    ### si skullstrip dans le preprocessing
-    l1analysis.connect(inputnode, 'mask',level1design,'mask_image')
+    l1analysis.connect(inputnode, 'brain_mask',level1design,'mask_image')
     
     ### other nodes
     l1analysis.connect(modelspec,'session_info', level1design,'session_info')
+    
     
     l1analysis.connect(level1design,'spm_mat_file', level1estimate,'spm_mat_file')
     
@@ -98,6 +97,8 @@ def create_level1_4D_spm12(contrasts,wf_name = 'level1_4D_spm12', deriv1 = False
 
     return l1analysis
     
+
+
 def create_level2_one_sample_ttest_spm12(wf_name = "level2_one_sample_test"):
 
     
