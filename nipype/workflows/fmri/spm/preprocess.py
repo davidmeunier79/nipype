@@ -561,13 +561,10 @@ def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_
 
     preprocess.connect(realign,'realignment_parameters',art,'realignment_parameters')
     
-
-    if normalize12:
-        preprocess.connect(normalize, 'normalized_files',art,'realigned_files')
-    else:
-        preprocess.connect(normalize_func,'normalized_files',art,'realigned_files')
-    
+    preprocess.connect(coregister,'coregistered_files',art,'realigned_files')
+        
     if skullstripping:
+        
         art.inputs.mask_type            = 'file'
         
         ########## unzip optiBet mask
@@ -580,24 +577,34 @@ def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_
         reslice = pe.Node(interface = spm.Reslice(), name = 'reslice')
         
         preprocess.connect(gunzip,'out_file',reslice,'in_file')
-        
-        
-        
-        if normalize12:
-            preprocess.connect(normalize, ('normalized_files',get_first) ,reslice,'space_defining')
-            
-        else:
-            preprocess.connect(normalize_func,('normalized_files',get_first) ,reslice,'space_defining')
-        
+        preprocess.connect(coregister, ('coregistered_files',get_first) ,reslice,'space_defining')
+           
+        ############ defining for mask for art 
         preprocess.connect(reslice,'out_file',art,'mask_file')
         
+        
+        ##################### normalize_mask
+        if normalize12:
+            normalize_mask = pe.Node(interface=spm.Normalize12(), name = "normalize_mask")
+            normalize_mask.inputs.jobtype = 'write'
+            
+            preprocess.connect(normalize, 'deformation_field',normalize_mask,'deformation_file')            
+            preprocess.connect(reslice,'out_file',normalize_mask,'apply_to_files') ##SPM12 Normalize12
+            
+        else:
+            normalize_mask = pe.Node(interface=spm.Normalize(), name = "normalize_mask")
+            normalize_mask.inputs.jobtype = 'write'
+            
+            preprocess.connect(segment,'transformation_mat', normalize_mask, 'parameter_file')
+            preprocess.connect(reslice,'out_file',normalize_mask,'apply_to_files')    
+            
     else:
         art.inputs.mask_type            = 'spm_global'
-      
+        
     return preprocess
     
 
-def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_funct_to_struct_4D_spm12_art', mult = True,  slice_timing = False, fast_segmenting = True, smoothing = False, output_normalized_segmented_maps = False, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8],slice_timings = [],ref_timings = -1.0, skullstripping = False,nb_scans_to_remove = 2, trimming = True,normalize12 = True):
+def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_funct_to_struct_4D_spm12_art', mult = True,  slice_timing = False, fast_segmenting = True, smoothing = False, output_normalized_segmented_maps = False, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8],slice_timings = [],ref_timings = -1.0, skullstripping = False,nb_scans_to_remove = 2, trimming = True,normalize12 = True,zintensity_threshold = 2.5,norm_threshold = 0.5):
     """ 
     Preprocessing old fashioned normalize funct -> struct with SPM12
     """
@@ -643,6 +650,7 @@ def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_fun
         
         preprocess.connect(coregister,'coregistered_files',normalize,'apply_to_files') ##SPM12 Normalize12
         
+        
     else:
             
         ############ Old fashionned segment with SPM12
@@ -680,22 +688,19 @@ def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_fun
 
     ### norm move
     art.inputs.use_norm             = True
-    art.inputs.norm_threshold       = 0.5 # 1    
+    art.inputs.norm_threshold       = norm_threshold# 1    
 
     ### transaltion only
     #art.inputs.use_norm             = False
     #art.inputs.translation_threshold       = 3
 
-    art.inputs.zintensity_threshold = 2.5 # 3     
+    art.inputs.zintensity_threshold = zintensity_threshold# 3     
         
     art.inputs.parameter_source     = 'SPM'
 
     preprocess.connect(inputnode,'rps',art,'realignment_parameters')
     
-    if trimming:
-        preprocess.connect(trim, 'out_file',art,'realigned_files')
-    else:
-        preprocess.connect(inputnode,'functionals',art,'realigned_files')
+    preprocess.connect(coregister,'coregistered_files',art,'realigned_files')
         
     if skullstripping:
         
@@ -715,6 +720,23 @@ def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_fun
            
         ############ defining for mask for art 
         preprocess.connect(reslice,'out_file',art,'mask_file')
+        
+        
+        ##################### normalize_mask
+        
+        if normalize12:
+            normalize_mask = pe.Node(interface=spm.Normalize12(), name = "normalize_mask")
+            normalize_mask.inputs.jobtype = 'write'
+            
+            preprocess.connect(normalize, 'deformation_field',normalize_mask,'deformation_file')            
+            preprocess.connect(reslice,'out_file',normalize_mask,'apply_to_files') ##SPM12 Normalize12
+            
+        else:
+            normalize_mask = pe.Node(interface=spm.Normalize(), name = "normalize_mask")
+            normalize_mask.inputs.jobtype = 'write'
+            
+            preprocess.connect(segment,'transformation_mat', normalize_mask, 'parameter_file')
+            preprocess.connect(reslice,'out_file',normalize_mask,'apply_to_files')    
         
     else:
         
