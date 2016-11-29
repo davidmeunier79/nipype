@@ -727,6 +727,7 @@ def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_fun
         if normalize12:
             normalize_mask = pe.Node(interface=spm.Normalize12(), name = "normalize_mask")
             normalize_mask.inputs.jobtype = 'write'
+            normalize_mask.inputs.write_interp = 0
             
             preprocess.connect(normalize, 'deformation_field',normalize_mask,'deformation_file')            
             preprocess.connect(reslice,'out_file',normalize_mask,'apply_to_files') ##SPM12 Normalize12
