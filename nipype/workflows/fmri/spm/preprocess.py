@@ -610,6 +610,7 @@ def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_fun
     """
     preprocess = pe.Workflow(name=wf_name)
 
+    ############################ input node #############################
     inputnode = pe.Node(niu.IdentityInterface(fields=['functionals','struct','mean_functional','rps','brain_mask']),name='inputnode')
 
     if trimming:
@@ -625,15 +626,63 @@ def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_fun
         preprocess.connect(inputnode,'functionals',trim,'in_file')
   
 
+    if slice_timing:
+        
+        #### sliceTiming
+        sliceTiming = pe.Node(interface=spm.SliceTiming(), name="sliceTiming")
+        sliceTiming.inputs.num_slices = num_slices
+        sliceTiming.inputs.time_repetition = TR
+        sliceTiming.inputs.time_acquisition = TR - TR/num_slices
+        
+        if slice_code == 5:  #for Siemens-even interleaved ascending
+                
+    
+            sliceTiming.inputs.slice_order = range(2,num_slices+1,2) + range(1,num_slices+1,2)      #for Siemens-even interleaved ascending 
+            #sliceTiming.inputs.ref_slice = num_slices-1
+            sliceTiming.inputs.ref_slice = num_slices ### a verifier...
+                
+        elif slice_code == 2:  #for Siemens sequential_decreasing
+                
+            sliceTiming.inputs.slice_order = range(num_slices,0,-1)
+            sliceTiming.inputs.ref_slice = int(num_slices/2.0)
+            
+        elif slice_code == -1: 
+            ### Attention, timing de chaque slice et non ordre d'acquisition des slices
+            ### utilise pour faire du slice_timing avec une aquisition multiband
+            
+            print "Running multiband slice timing...experimental"
+            
+            if len(slice_timings) != 0:
+                
+                sliceTiming.inputs.slice_order = slice_timings
+                sliceTiming.inputs.ref_slice = ref_timings
+            
+        #sliceTiming.inputs.slice_order = range(1,42,2) + range(2,42,2)      #for Siemens-odd interleaved ascending
+        #sliceTiming.inputs.slice_order = range(1,28+1)      #for bottom up slicing
+        #sliceTiming.inputs.slice_order = range(28,0,-1)    #for top down slicing
+        
+    ############### coregister mean_funct to anat #######################################
     coregister = pe.Node(interface=spm.Coregister(), name="coregister")
     coregister.inputs.jobtype = 'estimate'
 
 
     if trimming:
-        preprocess.connect(trim, 'out_file', coregister,'apply_to_files')
-    else:
-        preprocess.connect(inputnode,'functionals',coregister,'apply_to_files')
         
+        preprocess.connect(inputnode,'functionals',trim,'in_file')
+        
+        if slice_timing: 
+            preprocess.connect(trim, 'out_file', sliceTiming,'in_files')
+            preprocess.connect(sliceTiming, 'timecorrected_files',  coregister,'apply_to_files')
+        else: 
+            preprocess.connect(trim, 'out_file',  coregister,'apply_to_files')
+    else:
+        if slice_timing: 
+            preprocess.connect(inputnode,'functionals', sliceTiming,'in_files')
+            preprocess.connect(sliceTiming, 'timecorrected_files',  coregister,'apply_to_files')
+        else: 
+            preprocess.connect(inputnode,'functionals',  coregister,'apply_to_files')
+
+
         
     preprocess.connect(inputnode, 'struct', coregister,'target')
     preprocess.connect(inputnode,'mean_functional',coregister,'source')
