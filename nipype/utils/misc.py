@@ -250,8 +250,10 @@ def unflatten(in_list, prev_structure):
 #### fonctions utilitaires vite faites ###################################
 
 def get_first(string_list):
-    #print string_list
-    return string_list[0]
+    if isinstance(string_list, list):
+        return string_list[0]
+    else:
+        return string_list
     
 def get_second(string_list):
     return string_list[1]
