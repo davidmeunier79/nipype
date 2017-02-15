@@ -6,38 +6,48 @@
 
 This page covers the necessary steps to install Nipype.
 
-Download
---------
+Nipype for users
+----------------
 
-Current release: `<https://github.com/nipy/nipype/releases/latest>`_.
+Using conda
+~~~~~~~~~~~
 
-Development version: [`zip <http://github.com/nipy/nipype/zipball/master>`__ `tar.gz
-<http://github.com/nipy/nipype/tarball/master>`__]
+Installing nipype from the conda-forge channel can be achieved by adding conda-forge to your channels with::
 
-`Prior downloads <http://github.com/nipy/nipype/tags>`_
+  conda config --add channels conda-forge
 
-To check out the latest development version::
 
-        git clone git://github.com/nipy/nipype.git
+Once the conda-forge channel has been enabled, nipype can be installed with::
 
-or::
+  conda install nipype
 
-        git clone https://github.com/nipy/nipype.git
 
-Check out the list of nipype's `current dependencies <https://github.com/shoshber/nipype/blob/master/nipype/info.py#L105>`_.
+It is possible to list all of the versions of nipype available on your platform with::
 
-Install
--------
+  conda search nipype --channel conda-forge
+
+For more information, please see https://github.com/conda-forge/nipype-feedstock
+
+
+Using Pypi
+~~~~~~~~~~
 
 The installation process is similar to other Python packages.
 
 If you already have a Python environment set up, you can do::
 
-	easy_install nipype
+  easy_install nipype
 
 or::
 
-	pip install nipype
+  pip install nipype
+
+
+If you want to install all the optional features of ``nipype``,
+use the following command (only for ``nipype>=0.13``)::
+
+  pip install nipype[all]
+
 
 Debian and Ubuntu
 ~~~~~~~~~~~~~~~~~
@@ -52,64 +62,41 @@ Mac OS X
 The easiest way to get nipype running on Mac OS X is to install Anaconda_ or
 Canopy_ and then add nipype by executing::
 
-	easy_install nipype
+  easy_install nipype
+
 
 From source
 ~~~~~~~~~~~
+
+The current release is found here: `<https://github.com/nipy/nipype/releases/latest>`_.
+
+The development version: [`zip <http://github.com/nipy/nipype/zipball/master>`__ `tar.gz
+<http://github.com/nipy/nipype/tarball/master>`__]
+
+For previous versions: `prior downloads <http://github.com/nipy/nipype/tags>`_
 
 If you downloaded the source distribution named something
 like ``nipype-x.y.tar.gz``, then unpack the tarball, change into the
 ``nipype-x.y`` directory and install nipype using::
 
-    pip install -e .
+    python setup.py install
 
 **Note:** Depending on permissions you may need to use ``sudo``.
+
 
 Testing the install
 -------------------
 
-The best way to test the install is to run the test suite.  If you have
-nose_ installed, then do the following::
+The best way to test the install is checking nipype's version ::
 
-    python -c "import nipype; nipype.test()"
+    python -c "import nipype; print(nipype.__version__)"
 
-you can also test with nosetests::
 
-    nosetests --with-doctest <installation filepath>/nipype  --exclude=external --exclude=testing
+Installation for developers
+---------------------------
 
-or::
+Developers should start `here <../devel/testing_nipype.html>`_.
 
-    nosetests --with-doctest nipype
-
-A successful test run should complete in a few minutes and end with
-something like::
-
-    Ran 13053 tests in 126.618s
-
-    OK (SKIP=66)
-
-All tests should pass (unless you're missing a dependency). If SUBJECTS_DIR
-variable is not set some FreeSurfer related tests will fail. If any tests
-fail, please report them on our `bug tracker
-<http://github.com/nipy/nipype/issues>`_.
-
-On Debian systems, set the following environment variable before running
-tests::
-
-       export MATLABCMD=$pathtomatlabdir/bin/$platform/MATLAB
-
-where ``$pathtomatlabdir`` is the path to your matlab installation and
-``$platform`` is the directory referring to x86 or x64 installations
-(typically ``glnxa64`` on 64-bit installations).
-
-Avoiding any MATLAB calls from testing
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-On unix systems, set an empty environment variable::
-
-    export NIPYPE_NO_MATLAB=
-
-This will skip any tests that require matlab.
 
 Recommended Software
 ------------
@@ -165,6 +152,10 @@ Nipy_
 
 Nitime_
   (optional)
+
+ANTS_
+
+MRtrix_ and MRtrix3_
 
 Camino_
 
