@@ -259,15 +259,13 @@ def get_second(string_list):
     
 ### utilitaire pour vérifier la longueur d'une liste sans avoir à créer de nouveaux noeuds
 def show_length(files):
-
-    print len(files)
-    
+    print(len(files))
     return files
     
 ### utilitaire pour vérifier une liste sans avoir à créer de nouveaux noeuds
 def show_files(files):
 
-    print files
+    print(files)
     
     return files
 
