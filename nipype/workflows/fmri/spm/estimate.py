@@ -23,7 +23,7 @@ from nipype.pipeline.engine import Workflow
 
 
 
-def create_level1_4D_spm12(wf_name = 'level1_4D_spm12', deriv1 = False, concat_runs = True, high_pass_filter_cutoff = 128, model_serial_correlations = "none",global_intensity_normalization = 'none' ):
+def create_level1_4D_spm12(wf_name = 'level1_4D_spm12', deriv1 = False, concat_runs = True, high_pass_filter_cutoff = 128, model_serial_correlations = "none",global_intensity_normalization = 'none' , FIR_model =False, FIR_order = -1, window_length = -1):
 
     l1analysis = pe.Workflow(name=wf_name)
     
@@ -52,10 +52,13 @@ def create_level1_4D_spm12(wf_name = 'level1_4D_spm12', deriv1 = False, concat_r
         
     level1design = pe.Node(interface=spm.Level1Design(), name= "level1design")
      
-    if deriv1 == True:
-        level1design.inputs.bases  = {'hrf':{'derivs': [1,0]}}
+    if FIR_model:
+        level1design.inputs.bases  = {'fir':{'length':window_length,'order':FIR_order}}
     else:
-        level1design.inputs.bases  = {'hrf':{'derivs': [0,0]}}  
+        if deriv1 == True:
+            level1design.inputs.bases  = {'hrf':{'derivs': [1,0]}}
+        else:
+            level1design.inputs.bases  = {'hrf':{'derivs': [0,0]}}  
     
     level1design.inputs.timing_units = 'secs'
     

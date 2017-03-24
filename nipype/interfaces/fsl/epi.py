@@ -496,7 +496,7 @@ class Eddy(FSLCommand):
     >>> res = eddy.run() # doctest: +SKIP
 
     """
-    _cmd = 'eddy_openmp'
+    _cmd = 'eddy'
     input_spec = EddyInputSpec
     output_spec = EddyOutputSpec
 
@@ -525,7 +525,7 @@ class Eddy(FSLCommand):
         if self.inputs.use_cuda:
             _cmd = 'eddy_cuda'
         else:
-            _cmd = 'eddy_openmp'
+            _cmd = 'eddy'
 
     def _format_arg(self, name, spec, value):
         if name == 'in_topup_fieldcoef':
@@ -536,8 +536,10 @@ class Eddy(FSLCommand):
 
     def _list_outputs(self):
         outputs = self.output_spec().get()
-        outputs['out_corrected'] = os.path.abspath(
-            '%s.nii.gz' % self.inputs.out_base)
+        
+        outputs['out_corrected'] = os.path.abspath(            '%s.nii' % self.inputs.out_base)
+        #outputs['out_corrected'] = os.path.abspath(            '%s.nii.gz' % self.inputs.out_base)
+        
         outputs['out_parameter'] = os.path.abspath(
             '%s.eddy_parameters' % self.inputs.out_base)
 

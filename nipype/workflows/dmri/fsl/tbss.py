@@ -13,6 +13,11 @@ from ....interfaces import fsl as fsl
 def tbss1_op_string(in_files):
     import nibabel as nib
     op_strings = []
+    print(in_files)
+    
+    if not isinstance(in_files,list):
+        in_files = [in_files]
+        
     for infile in in_files:
         img = nib.load(infile)
         dimtup = tuple(d - 2 for d in img.shape)
@@ -548,7 +553,8 @@ def create_tbss_non_FA(name='tbss_non_FA'):
     maskgroup = pe.Node(fsl.ImageMaths(op_string="-mas",
                                        suffix="_masked"),
                         name="maskgroup")
-    projectfa = pe.Node(fsl.TractSkeleton(project_data=True,
+    #projectfa = pe.Node(fsl.TractSkeleton(project_data=True,
+    projectfa = pe.Node(fsl.TractSkeleton(
                                           # projected_data = 'test.nii.gz',
                                           use_cingulum_mask=True
                                           ),

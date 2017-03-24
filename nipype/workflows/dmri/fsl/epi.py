@@ -741,11 +741,11 @@ def _dilate_mask(in_file, iterations=4):
     import scipy.ndimage as ndimage
     import os
     
-    print in_file
+    print(in_file)
     
     img = nib.load(in_file)
     
-    print img.get_data().shape
+    print(img.get_data().shape)
     
     img.data = ndimage.binary_dilation(img.get_data(), iterations=iterations)
 

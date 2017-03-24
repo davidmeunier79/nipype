@@ -456,6 +456,9 @@ def b0_average(in_dwi, in_bval, max_b=10.0, out_file=None):
 
     b0s = [im.get_data().astype(np.float32)
            for im in imgs[index]]
+    
+    print (np.array(b0s).shape)
+    
     b0 = np.average(np.array(b0s), axis=0)
 
     hdr = imgs[0].header.copy()
@@ -463,6 +466,40 @@ def b0_average(in_dwi, in_bval, max_b=10.0, out_file=None):
     hdr.set_xyzt_units('mm')
     hdr.set_data_dtype(np.float32)
     nb.Nifti1Image(b0, imgs[0].affine, hdr).to_filename(out_file)
+    return out_file
+
+def average4d(in_dwi):
+    """
+    A function that averages the *b0* volumes from a DWI dataset.
+    As current dMRI data are being acquired with all b-values > 0.0,
+    the *lowb* volumes are selected by specifying the parameter max_b.
+
+    .. warning:: *b0* should be already registered (head motion artifact should
+      be corrected).
+
+    """
+    import numpy as np
+    import nibabel as nb
+    import os.path as op
+
+    fname, ext = op.splitext(op.basename(in_dwi))
+    if ext == ".gz":
+        fname, ext2 = op.splitext(fname)
+        ext = ext2 + ext
+    out_file = op.abspath("%s_avg_b0%s" % (fname, ext))
+
+    imgs = nb.load(in_dwi)
+    img_data = np.array(imgs.get_data())
+    
+    print (img_data.shape)
+    
+    b0 = np.average(img_data, axis=3)
+
+    hdr = imgs.header.copy()
+    hdr.set_data_shape(b0.shape)
+    hdr.set_xyzt_units('mm')
+    hdr.set_data_dtype(np.float32)
+    nb.Nifti1Image(b0, imgs.affine, hdr).to_filename(out_file)
     return out_file
 
 

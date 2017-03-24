@@ -401,7 +401,7 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
     
     return preprocess
     
-def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_struct_4D_spm12_art', mult = True, trimming = False, slice_timing = False, fast_segmenting = True, smoothing = False, output_normalized_segmented_maps = False, nb_scans_to_remove = 2, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8],slice_timings = [],ref_timings = -1.0, skullstripping = False, normalize12 = False):
+def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_struct_4D_spm12_art', mult = True, trimming = False, slice_timing = False, fast_segmenting = True, smoothing = False, output_normalized_segmented_maps = False, nb_scans_to_remove = 2, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8],slice_timings = [],ref_timings = -1.0, skullstripping = False, normalize12 = False, normalize = False, norm_template_file = 0):
     """ 
     Preprocessing old fashioned normalize funct -> struct with SPM12
     """
@@ -460,7 +460,7 @@ def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_
         #sliceTiming.inputs.slice_order = range(1,42,2) + range(2,42,2)      #for Siemens-odd interleaved ascending
         #sliceTiming.inputs.slice_order = range(1,28+1)      #for bottom up slicing
         #sliceTiming.inputs.slice_order = range(28,0,-1)    #for top down slicing
-        
+      
     ##### realign
     realign = pe.Node(interface=spm.Realign(), name="realign")
     realign.inputs.register_to_mean = True
@@ -480,14 +480,13 @@ def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_
             preprocess.connect(sliceTiming, 'timecorrected_files', realign,'in_files')
         else: 
             preprocess.connect(inputnode,'functionals', realign,'in_files')
-
+  
     coregister = pe.Node(interface=spm.Coregister(), name="coregister")
     coregister.inputs.jobtype = 'estimate'
    
     preprocess.connect(inputnode, 'struct', coregister,'target')
     preprocess.connect(realign,'mean_image',coregister,'source')
     preprocess.connect(realign,'realigned_files',coregister,'apply_to_files')
-    
     
     if normalize12:
             
@@ -499,6 +498,21 @@ def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_
         #preprocess.connect(realign,'mean_image',normalize,'image_to_align')
         
         preprocess.connect(coregister,'coregistered_files',normalize,'apply_to_files') ##SPM12 Normalize12
+        
+    elif normalize:
+        
+        ### normalise struct to MNI using segement transformation_matrix
+        normalize = pe.Node(interface=spm.Normalize(), name = "normalize_struct")
+        normalize.inputs.jobtype = 'estwrite'
+        
+        preprocess.connect(inputnode, 'struct', normalize,'source')
+        preprocess.connect(coregister,'coregistered_files',normalize,'apply_to_files')    
+        
+        if norm_template_file == 0:
+            
+            norm_template_file = os.path.join(matlab_spm_path,"toolbox","OldNorm","EPI.nii")
+            
+        normalize.inputs.target = norm_template_file
         
     else:
             
@@ -530,6 +544,9 @@ def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_
         preprocess.connect(coregister,'coregistered_files',normalize_func,'apply_to_files')    
         preprocess.connect(segment,'transformation_mat', normalize_func, 'parameter_file')
         
+    return preprocess
+
+    
     if smoothing:
         
         ### smoothing
@@ -717,14 +734,14 @@ def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_fun
             
         preprocess.connect(inputnode, 'struct', segment,'data')
 
-        ### normalise struct to MNI using segement transformation_matrix
+        ### normalise struct to MNI using segment transformation_matrix
         normalize_struct = pe.Node(interface=spm.Normalize(), name = "normalize_struct")
         normalize_struct.inputs.jobtype = 'write'
 
         preprocess.connect(inputnode, 'struct', normalize_struct,'apply_to_files')    
         preprocess.connect(segment,'transformation_mat', normalize_struct, 'parameter_file')
 
-        ### normalise functionals to MNI using segement transformation_matrix
+        ### normalise functionals to MNI using segment transformation_matrix
         normalize_func = pe.Node(interface=spm.Normalize(), name = "normalize_func")
         normalize_func.inputs.jobtype = 'write'
 
