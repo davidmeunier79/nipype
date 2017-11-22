@@ -12,18 +12,21 @@ was written to work with FSL version 5.0.4.
     ...                            '../../testing/data'))
     >>> os.chdir(datadir)
 """
-from __future__ import print_function, division, unicode_literals, absolute_import
+from __future__ import print_function, division, unicode_literals, \
+    absolute_import
 from builtins import str
 
 import os
 import numpy as np
-import nibabel as nib
+import nibabel as nb
 import warnings
 
 from ...utils.filemanip import split_filename
+from ...utils import NUMPY_MMAP
+
 from ..base import (traits, TraitedSpec, InputMultiPath, File,
                     isdefined)
-from .base import FSLCommand, FSLCommandInputSpec
+from .base import FSLCommand, FSLCommandInputSpec, Info
 
 
 class PrepareFieldmapInputSpec(FSLCommandInputSpec):
@@ -68,7 +71,7 @@ class PrepareFieldmap(FSLCommand):
     >>> prepare.inputs.in_phase = "phase.nii"
     >>> prepare.inputs.in_magnitude = "magnitude.nii"
     >>> prepare.inputs.output_type = "NIFTI_GZ"
-    >>> prepare.cmdline # doctest: +ELLIPSIS +ALLOW_UNICODE
+    >>> prepare.cmdline # doctest: +ELLIPSIS
     'fsl_prepare_fieldmap SIEMENS phase.nii magnitude.nii \
 .../phase_fslprepared.nii.gz 2.460000'
     >>> res = prepare.run() # doctest: +SKIP
@@ -102,11 +105,11 @@ class PrepareFieldmap(FSLCommand):
 
         if runtime.returncode == 0:
             out_file = self.inputs.out_fieldmap
-            im = nib.load(out_file)
-            dumb_img = nib.Nifti1Image(np.zeros(im.shape), im.affine,
-                                       im.header)
-            out_nii = nib.funcs.concat_images((im, dumb_img))
-            nib.save(out_nii, out_file)
+            im = nb.load(out_file, mmap=NUMPY_MMAP)
+            dumb_img = nb.Nifti1Image(np.zeros(im.shape), im.affine,
+                                      im.header)
+            out_nii = nb.funcs.concat_images((im, dumb_img))
+            nb.save(out_nii, out_file)
 
         return runtime
 
@@ -137,6 +140,16 @@ class TOPUPInputSpec(FSLCommandInputSpec):
     out_field = File(argstr='--fout=%s', hash_files=False,
                      name_source=['in_file'], name_template='%s_field',
                      desc='name of image file with field (Hz)')
+    out_warp_prefix = traits.Str("warpfield", argstr='--dfout=%s', hash_files=False,
+                                 desc='prefix for the warpfield images (in mm)',
+                                 usedefault=True)
+    out_mat_prefix = traits.Str("xfm", argstr='--rbmout=%s', hash_files=False,
+                                desc='prefix for the realignment matrices',
+                                usedefault=True)
+    out_jac_prefix = traits.Str("jac", argstr='--jacout=%s',
+                                 hash_files=False,
+                                 desc='prefix for the warpfield images',
+                                 usedefault=True)
     out_corrected = File(argstr='--iout=%s', hash_files=False,
                          name_source=['in_file'], name_template='%s_corrected',
                          desc='name of 4D image file with unwarped images')
@@ -209,6 +222,9 @@ class TOPUPOutputSpec(TraitedSpec):
     out_movpar = File(exists=True, desc='movpar.txt output file')
     out_enc_file = File(desc='encoding directions file output for applytopup')
     out_field = File(desc='name of image file with field (Hz)')
+    out_warps = traits.List(File(exists=True), desc='warpfield images')
+    out_jacs = traits.List(File(exists=True), desc='Jacobian images')
+    out_mats = traits.List(File(exists=True), desc='realignment matrices')
     out_corrected = File(desc='name of 4D image file with unwarped images')
     out_logfile = File(desc='name of log-file')
 
@@ -231,10 +247,11 @@ class TOPUP(FSLCommand):
     >>> topup.inputs.in_file = "b0_b0rev.nii"
     >>> topup.inputs.encoding_file = "topup_encoding.txt"
     >>> topup.inputs.output_type = "NIFTI_GZ"
-    >>> topup.cmdline # doctest: +ELLIPSIS +ALLOW_UNICODE
+    >>> topup.cmdline # doctest: +ELLIPSIS
     'topup --config=b02b0.cnf --datain=topup_encoding.txt \
 --imain=b0_b0rev.nii --out=b0_b0rev_base --iout=b0_b0rev_corrected.nii.gz \
---fout=b0_b0rev_field.nii.gz --logout=b0_b0rev_topup.log'
+--fout=b0_b0rev_field.nii.gz --jacout=jac --logout=b0_b0rev_topup.log \
+--rbmout=xfm --dfout=warpfield'
     >>> res = topup.run() # doctest: +SKIP
 
     """
@@ -266,6 +283,19 @@ class TOPUP(FSLCommand):
                                                    cwd=base_path)
         outputs['out_movpar'] = self._gen_fname(base, suffix='_movpar',
                                                 ext='.txt', cwd=base_path)
+
+        n_vols = nb.load(self.inputs.in_file).shape[-1]
+        ext = Info.output_type_to_ext(self.inputs.output_type)
+        fmt = os.path.abspath('{prefix}_{i:02d}{ext}').format
+        outputs['out_warps'] = [
+            fmt(prefix=self.inputs.out_warp_prefix, i=i, ext=ext)
+            for i in range(1, n_vols + 1)]
+        outputs['out_jacs'] = [
+            fmt(prefix=self.inputs.out_jac_prefix, i=i, ext=ext)
+            for i in range(1, n_vols + 1)]
+        outputs['out_mats'] = [
+            fmt(prefix=self.inputs.out_mat_prefix, i=i, ext=".mat")
+            for i in range(1, n_vols + 1)]
 
         if isdefined(self.inputs.encoding_direction):
             outputs['out_enc_file'] = self._get_encfilename()
@@ -359,7 +389,7 @@ class ApplyTOPUP(FSLCommand):
     >>> applytopup.inputs.in_topup_fieldcoef = "topup_fieldcoef.nii.gz"
     >>> applytopup.inputs.in_topup_movpar = "topup_movpar.txt"
     >>> applytopup.inputs.output_type = "NIFTI_GZ"
-    >>> applytopup.cmdline # doctest: +ELLIPSIS +ALLOW_UNICODE
+    >>> applytopup.cmdline # doctest: +ELLIPSIS
     'applytopup --datain=topup_encoding.txt --imain=epi.nii,epi_rev.nii \
 --inindex=1,2 --topup=topup --out=epi_corrected.nii.gz'
     >>> res = applytopup.run() # doctest: +SKIP
@@ -420,6 +450,32 @@ class EddyInputSpec(FSLCommandInputSpec):
     flm = traits.Enum('linear', 'quadratic', 'cubic', argstr='--flm=%s',
                       desc='First level EC model')
 
+    slm = traits.Enum('none', 'linear', 'quadratic', argstr='--slm=%s',
+                      desc='Second level EC model')
+
+    fep = traits.Bool(False, argstr='--fep',
+                      desc='Fill empty planes in x- or y-directions')
+
+    interp = traits.Enum('spline', 'trilinear', argstr='--interp=%s',
+                         desc='Interpolation model for estimation step')
+
+    nvoxhp = traits.Int(1000, argstr='--nvoxhp=%s',
+                        desc=('# of voxels used to estimate the '
+                              'hyperparameters'))
+
+    fudge_factor = traits.Float(10.0, argstr='--ff=%s',
+                                desc=('Fudge factor for hyperparameter '
+                                      'error variance'))
+
+    dont_sep_offs_move = traits.Bool(False, argstr='--dont_sep_offs_move',
+                                     desc=('Do NOT attempt to separate '
+                                           'field offset from subject '
+                                           'movement'))
+
+    dont_peas = traits.Bool(False, argstr='--dont_peas',
+                           desc="Do NOT perform a post-eddy alignment of "
+                                "shells")
+
     fwhm = traits.Float(desc=('FWHM for conditioning filter when estimating '
                               'the parameters'), argstr='--fwhm=%s')
 
@@ -448,26 +504,25 @@ class EddyInputSpec(FSLCommandInputSpec):
 
 
 class EddyOutputSpec(TraitedSpec):
-    out_corrected = File(exists=True,
-                         desc=('4D image file containing all the corrected '
-                               'volumes'))
-    out_parameter = File(exists=True,
-                         desc=('text file with parameters definining the '
-                               'field and movement for each scan'))
-    out_rotated_bvecs = File(exists=True,
-                             desc=('File containing rotated b-values for all volumes'))
-    out_movement_rms = File(exists=True,
-                            desc=('Summary of the "total movement" in each volume'))
-    out_restricted_movement_rms = File(exists=True,
-                                       desc=('Summary of the "total movement" in each volume '
-                                             'disregarding translation in the PE direction'))
-    out_shell_alignment_parameters = File(exists=True,
-                                          desc=('File containing rigid body movement parameters '
-                                                'between the different shells as estimated by a '
-                                                'post-hoc mutual information based registration'))
-    out_outlier_report = File(exists=True,
-                              desc=('Text-file with a plain language report '
-                                    'on what outlier slices eddy has found'))
+    out_corrected = File(
+        exists=True, desc='4D image file containing all the corrected volumes')
+    out_parameter = File(
+        exists=True, desc=('text file with parameters definining the field and'
+                           'movement for each scan'))
+    out_rotated_bvecs = File(
+        exists=True, desc='File containing rotated b-values for all volumes')
+    out_movement_rms = File(
+        exists=True, desc='Summary of the "total movement" in each volume')
+    out_restricted_movement_rms = File(
+        exists=True, desc=('Summary of the "total movement" in each volume '
+                           'disregarding translation in the PE direction'))
+    out_shell_alignment_parameters = File(
+        exists=True, desc=('File containing rigid body movement parameters '
+                           'between the different shells as estimated by a '
+                           'post-hoc mutual information based registration'))
+    out_outlier_report = File(
+        exists=True, desc=('Text-file with a plain language report on what '
+                           'outlier slices eddy has found'))
 
 
 class Eddy(FSLCommand):
@@ -489,10 +544,16 @@ class Eddy(FSLCommand):
     >>> eddy.inputs.in_acqp  = 'epi_acqp.txt'
     >>> eddy.inputs.in_bvec  = 'bvecs.scheme'
     >>> eddy.inputs.in_bval  = 'bvals.scheme'
-    >>> eddy.cmdline # doctest: +ELLIPSIS +ALLOW_UNICODE
-    'eddy_openmp --acqp=epi_acqp.txt --bvals=bvals.scheme --bvecs=bvecs.scheme \
+    >>> eddy.inputs.use_cuda = True
+    >>> eddy.cmdline # doctest: +ELLIPSIS
+    'eddy_cuda --acqp=epi_acqp.txt --bvals=bvals.scheme --bvecs=bvecs.scheme \
 --imain=epi.nii --index=epi_index.txt --mask=epi_mask.nii \
 --out=.../eddy_corrected'
+    >>> eddy.inputs.use_cuda = False
+    >>> eddy.cmdline # doctest: +ELLIPSIS
+    'eddy_openmp --acqp=epi_acqp.txt --bvals=bvals.scheme \
+--bvecs=bvecs.scheme --imain=epi.nii --index=epi_index.txt \
+--mask=epi_mask.nii --out=.../eddy_corrected'
     >>> res = eddy.run() # doctest: +SKIP
 
     """
@@ -505,12 +566,13 @@ class Eddy(FSLCommand):
     def __init__(self, **inputs):
         super(Eddy, self).__init__(**inputs)
         self.inputs.on_trait_change(self._num_threads_update, 'num_threads')
-        if isdefined(self.inputs.use_cuda):
-            self._use_cuda()
         if not isdefined(self.inputs.num_threads):
             self.inputs.num_threads = self._num_threads
         else:
             self._num_threads_update()
+        self.inputs.on_trait_change(self._use_cuda, 'use_cuda')
+        if isdefined(self.inputs.use_cuda):
+            self._use_cuda()
 
     def _num_threads_update(self):
         self._num_threads = self.inputs.num_threads
@@ -522,10 +584,22 @@ class Eddy(FSLCommand):
                 self.inputs.num_threads)
 
     def _use_cuda(self):
-        if self.inputs.use_cuda:
-            _cmd = 'eddy_cuda'
-        else:
-            _cmd = 'eddy'
+        
+        self._cmd = 'eddy_cuda' if self.inputs.use_cuda else 'eddy'
+
+    def _run_interface(self, runtime):
+        # If 'eddy_openmp' is missing, use 'eddy'
+        FSLDIR = os.getenv('FSLDIR', '')
+        cmd = self._cmd
+        if all((FSLDIR != '',
+                cmd == 'eddy_openmp',
+                not os.path.exists(os.path.join(FSLDIR, 'bin', cmd)))):
+            self._cmd = 'eddy'
+        runtime = super(Eddy, self)._run_interface(runtime)
+
+        # Restore command to avoid side-effects
+        self._cmd = cmd
+        return runtime
 
     def _format_arg(self, name, spec, value):
         if name == 'in_topup_fieldcoef':
@@ -551,7 +625,8 @@ class Eddy(FSLCommand):
         out_restricted_movement_rms = os.path.abspath(
             '%s.eddy_restricted_movement_rms' % self.inputs.out_base)
         out_shell_alignment_parameters = os.path.abspath(
-            '%s.eddy_post_eddy_shell_alignment_parameters' % self.inputs.out_base)
+            '%s.eddy_post_eddy_shell_alignment_parameters'
+            % self.inputs.out_base)
         out_outlier_report = os.path.abspath(
             '%s.eddy_outlier_report' % self.inputs.out_base)
 
@@ -560,9 +635,11 @@ class Eddy(FSLCommand):
         if os.path.exists(out_movement_rms):
             outputs['out_movement_rms'] = out_movement_rms
         if os.path.exists(out_restricted_movement_rms):
-            outputs['out_restricted_movement_rms'] = out_restricted_movement_rms
+            outputs['out_restricted_movement_rms'] = \
+                out_restricted_movement_rms
         if os.path.exists(out_shell_alignment_parameters):
-            outputs['out_shell_alignment_parameters'] = out_shell_alignment_parameters
+            outputs['out_shell_alignment_parameters'] = \
+                out_shell_alignment_parameters
         if os.path.exists(out_outlier_report):
             outputs['out_outlier_report'] = out_outlier_report
 
@@ -605,7 +682,7 @@ class SigLoss(FSLCommand):
     >>> sigloss.inputs.in_file = "phase.nii"
     >>> sigloss.inputs.echo_time = 0.03
     >>> sigloss.inputs.output_type = "NIFTI_GZ"
-    >>> sigloss.cmdline # doctest: +ELLIPSIS +ALLOW_UNICODE
+    >>> sigloss.cmdline # doctest: +ELLIPSIS
     'sigloss --te=0.030000 -i phase.nii -s .../phase_sigloss.nii.gz'
     >>> res = sigloss.run() # doctest: +SKIP
 
@@ -710,7 +787,7 @@ class EpiReg(FSLCommand):
     >>> epireg.inputs.fmapmagbrain='fieldmap_mag_brain.nii'
     >>> epireg.inputs.echospacing=0.00067
     >>> epireg.inputs.pedir='y'
-    >>> epireg.cmdline # doctest: +ELLIPSIS +ALLOW_UNICODE
+    >>> epireg.cmdline # doctest: +ELLIPSIS
     'epi_reg --echospacing=0.000670 --fmap=fieldmap_phase_fslprepared.nii \
 --fmapmag=fieldmap_mag.nii --fmapmagbrain=fieldmap_mag_brain.nii --noclean \
 --pedir=y --epi=epi.nii --t1=T1.nii --t1brain=T1_brain.nii --out=epi2struct'
@@ -821,7 +898,7 @@ class EPIDeWarp(FSLCommand):
     >>> dewarp.inputs.mag_file = "magnitude.nii"
     >>> dewarp.inputs.dph_file = "phase.nii"
     >>> dewarp.inputs.output_type = "NIFTI_GZ"
-    >>> dewarp.cmdline # doctest: +ELLIPSIS +ALLOW_UNICODE
+    >>> dewarp.cmdline # doctest: +ELLIPSIS
     'epidewarp.fsl --mag magnitude.nii --dph phase.nii --epi functional.nii \
 --esp 0.58 --exfdw .../exfdw.nii.gz --nocleanup --sigma 2 --tediff 2.46 \
 --tmpdir .../temp --vsm .../vsm.nii.gz'
@@ -914,7 +991,7 @@ class EddyCorrect(FSLCommand):
     >>> from nipype.interfaces.fsl import EddyCorrect
     >>> eddyc = EddyCorrect(in_file='diffusion.nii',
     ...                     out_file="diffusion_edc.nii", ref_num=0)
-    >>> eddyc.cmdline # doctest: +ALLOW_UNICODE
+    >>> eddyc.cmdline
     'eddy_correct diffusion.nii diffusion_edc.nii 0'
 
     """

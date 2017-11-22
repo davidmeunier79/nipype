@@ -34,8 +34,9 @@ import os
 from ... import logging
 from ...utils.filemanip import fname_presuffix
 from ..base import traits, isdefined, CommandLine, CommandLineInputSpec
+from ...external.due import BibTeX
 
-LOGGER = logging.getLogger('interface')
+IFLOGGER = logging.getLogger('interface')
 
 
 class Info(object):
@@ -112,8 +113,8 @@ class Info(object):
         try:
             return os.environ['FSLOUTPUTTYPE']
         except KeyError:
-            LOGGER.warn('FSLOUTPUTTYPE environment variable is not set. '
-                        'Setting FSLOUTPUTTYPE=NIFTI')
+            IFLOGGER.warn('FSLOUTPUTTYPE environment variable is not set. '
+                          'Setting FSLOUTPUTTYPE=NIFTI')
             return 'NIFTI'
 
     @staticmethod
@@ -156,6 +157,18 @@ class FSLCommand(CommandLine):
 
     input_spec = FSLCommandInputSpec
     _output_type = None
+
+    references_ = [{'entry': BibTeX('@article{JenkinsonBeckmannBehrensWoolrichSmith2012,'
+                                    'author={M. Jenkinson, C.F. Beckmann, T.E. Behrens, '
+                                    'M.W. Woolrich, and S.M. Smith},'
+                                    'title={FSL},'
+                                    'journal={NeuroImage},'
+                                    'volume={62},'
+                                    'pages={782-790},'
+                                    'year={2012},'
+                                    '}'),
+                    'tags': ['implementation'],
+                    }]
 
     def __init__(self, **inputs):
         super(FSLCommand, self).__init__(**inputs)

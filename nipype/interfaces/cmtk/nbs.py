@@ -32,7 +32,10 @@ def ntwks_to_matrices(in_files, edge_key):
     for idx, name in enumerate(in_files):
         graph = nx.read_gpickle(name)
         for u, v, d in graph.edges(data=True):
-            graph[u][v]['weight'] = d[edge_key]  # Setting the edge requested edge value as weight value
+            try:
+                graph[u][v]['weight'] = d[edge_key]  # Setting the edge requested edge value as weight value
+            except:
+                raise KeyError("the graph edges do not have {} attribute".format(edge_key))
         matrix[:, :, idx] = nx.to_numpy_matrix(graph)  # Retrieve the matrix
     return matrix
 
@@ -77,6 +80,10 @@ class NetworkBasedStatistic(BaseInterface):
     output_spec = NetworkBasedStatisticOutputSpec
 
     def _run_interface(self, runtime):
+
+        if not have_cv:
+            raise ImportError("cviewer library is not available")
+
         THRESH = self.inputs.threshold
         K = self.inputs.number_of_permutations
         TAIL = self.inputs.t_tail
@@ -111,21 +118,22 @@ class NetworkBasedStatistic(BaseInterface):
             node_ntwk_name = self.inputs.in_group1[0]
 
         node_network = nx.read_gpickle(node_ntwk_name)
-        iflogger.info('Populating node dictionaries with attributes from {node}'.format(node=node_ntwk_name))
+        iflogger.info('Populating node dictionaries with attributes from %s',
+                      node_ntwk_name)
 
-        for nid, ndata in node_network.nodes_iter(data=True):
-            nbsgraph.node[nid] = ndata
-            nbs_pval_graph.node[nid] = ndata
+        for nid, ndata in node_network.nodes(data=True):
+            nbsgraph.nodes[nid] = ndata
+            nbs_pval_graph.nodes[nid] = ndata
 
         path = op.abspath('NBS_Result_' + details)
         iflogger.info(path)
         nx.write_gpickle(nbsgraph, path)
-        iflogger.info('Saving output NBS edge network as {out}'.format(out=path))
+        iflogger.info('Saving output NBS edge network as %s', path)
 
         pval_path = op.abspath('NBS_P_vals_' + details)
         iflogger.info(pval_path)
         nx.write_gpickle(nbs_pval_graph, pval_path)
-        iflogger.info('Saving output p-value network as {out}'.format(out=pval_path))
+        iflogger.info('Saving output p-value network as %s', pval_path)
         return runtime
 
     def _list_outputs(self):

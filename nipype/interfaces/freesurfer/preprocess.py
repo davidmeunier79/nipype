@@ -36,13 +36,9 @@ from .utils import copy2subjdir
 __docformat__ = 'restructuredtext'
 iflogger = logging.getLogger('interface')
 
-FSVersion = "0"
-_ver = Info.version()
-if _ver:
-    if 'dev' in _ver:
-        FSVersion = _ver.rstrip().split('-')[-1] + '.dev'
-    else:
-        FSVersion = _ver.rstrip().split('-v')[-1]
+# Keeping this to avoid breaking external programs that depend on it, but
+# this should not be used internally
+FSVersion = Info.looseversion().vstring
 
 
 class ParseDICOMDirInputSpec(FSTraitedSpec):
@@ -71,7 +67,7 @@ class ParseDICOMDir(FSCommand):
     >>> dcminfo.inputs.dicom_dir = '.'
     >>> dcminfo.inputs.sortbyrun = True
     >>> dcminfo.inputs.summarize = True
-    >>> dcminfo.cmdline # doctest: +ALLOW_UNICODE
+    >>> dcminfo.cmdline
     'mri_parse_sdcmdir --d . --o dicominfo.txt --sortbyrun --summarize'
 
    """
@@ -135,7 +131,7 @@ class UnpackSDICOMDir(FSCommand):
     >>> unpack.inputs.output_dir = '.'
     >>> unpack.inputs.run_info = (5, 'mprage', 'nii', 'struct')
     >>> unpack.inputs.dir_structure = 'generic'
-    >>> unpack.cmdline # doctest: +ALLOW_UNICODE
+    >>> unpack.cmdline
     'unpacksdcmdir -generic -targ . -run 5 mprage nii struct -src .'
     """
     _cmd = 'unpacksdcmdir'
@@ -357,7 +353,7 @@ class MRIConvert(FSCommand):
     >>> mc.inputs.in_file = 'structural.nii'
     >>> mc.inputs.out_file = 'outfile.mgz'
     >>> mc.inputs.out_type = 'mgz'
-    >>> mc.cmdline # doctest: +ALLOW_UNICODE
+    >>> mc.cmdline
     'mri_convert --out_type mgz --input_volume structural.nii --output_volume outfile.mgz'
 
     """
@@ -583,7 +579,7 @@ class Resample(FSCommand):
     >>> resampler.inputs.in_file = 'structural.nii'
     >>> resampler.inputs.resampled_file = 'resampled.nii'
     >>> resampler.inputs.voxel_size = (2.1, 2.1, 2.1)
-    >>> resampler.cmdline # doctest: +ALLOW_UNICODE
+    >>> resampler.cmdline
     'mri_convert -vs 2.10 2.10 2.10 -i structural.nii -o resampled.nii'
 
     """
@@ -615,26 +611,91 @@ class Resample(FSCommand):
 class ReconAllInputSpec(CommandLineInputSpec):
     subject_id = traits.Str("recon_all", argstr='-subjid %s',
                             desc='subject name', usedefault=True)
-    directive = traits.Enum('all', 'autorecon1', 'autorecon2', 'autorecon2-cp',
-                            'autorecon2-wm', 'autorecon2-inflate1',
-                            'autorecon2-perhemi', 'autorecon3', 'localGI',
-                            'qcache', argstr='-%s', desc='process directive',
+    directive = traits.Enum('all', 'autorecon1',
+                            # autorecon2 variants
+                            'autorecon2', 'autorecon2-volonly',
+                            'autorecon2-perhemi', 'autorecon2-inflate1',
+                            'autorecon2-cp', 'autorecon2-wm',
+                            # autorecon3 variants
+                            'autorecon3', 'autorecon3-T2pial',
+                            # Mix of autorecon2 and autorecon3 steps
+                            'autorecon-pial', 'autorecon-hemi',
+                            # Not "multi-stage flags"
+                            'localGI', 'qcache',
+                            argstr='-%s', desc='process directive',
                             usedefault=True, position=0)
     hemi = traits.Enum('lh', 'rh', desc='hemisphere to process',
                        argstr="-hemi %s")
     T1_files = InputMultiPath(File(exists=True), argstr='-i %s...',
                               desc='name of T1 file to process')
-    T2_file = File(exists=True, argstr="-T2 %s", min_ver='5.3.0',
+    T2_file = File(exists=True, argstr="-T2 %s",
+                   min_ver='5.3.0',
                    desc='Convert T2 image to orig directory')
-    use_T2 = traits.Bool(argstr="-T2pial", min_ver='5.3.0',
-                         desc='Use converted T2 to refine the cortical surface')
+    FLAIR_file = File(exists=True, argstr="-FLAIR %s",
+                      min_ver='5.3.0',
+                      desc='Convert FLAIR image to orig directory')
+    use_T2 = traits.Bool(argstr="-T2pial", min_ver='5.3.0', xor=['use_FLAIR'],
+                         desc='Use T2 image to refine the pial surface')
+    use_FLAIR = traits.Bool(argstr="-FLAIRpial",
+                            min_ver='5.3.0', xor=['use_T2'],
+                            desc='Use FLAIR image to refine the pial surface')
     openmp = traits.Int(argstr="-openmp %d",
                         desc="Number of processors to use in parallel")
     parallel = traits.Bool(argstr="-parallel",
                            desc="Enable parallel execution")
+    hires = traits.Bool(argstr="-hires", min_ver='6.0.0',
+                        desc="Conform to minimum voxel size (for voxels < 1mm)")
+    mprage = traits.Bool(argstr='-mprage',
+                         desc=('Assume scan parameters are MGH MP-RAGE '
+                               'protocol, which produces darker gray matter'))
+    big_ventricles = traits.Bool(argstr='-bigventricles',
+                                 desc=('For use in subjects with enlarged '
+                                       'ventricles'))
+    brainstem = traits.Bool(argstr='-brainstem-structures',
+                            desc='Segment brainstem structures')
+    hippocampal_subfields_T1 = traits.Bool(
+        argstr='-hippocampal-subfields-T1', min_ver='6.0.0',
+        desc='segment hippocampal subfields using input T1 scan')
+    hippocampal_subfields_T2 = traits.Tuple(
+        File(exists=True), traits.Str(),
+        argstr='-hippocampal-subfields-T2 %s %s', min_ver='6.0.0',
+        desc=('segment hippocampal subfields using T2 scan, identified by '
+              'ID (may be combined with hippocampal_subfields_T1)'))
+    expert = File(exists=True, argstr='-expert %s',
+                  desc="Set parameters using expert file")
+    xopts = traits.Enum("use", "clean", "overwrite", argstr='-xopts-%s',
+                        desc="Use, delete or overwrite existing expert options file")
     subjects_dir = Directory(exists=True, argstr='-sd %s', hash_files=False,
                              desc='path to subjects directory', genfile=True)
-    flags = traits.Str(argstr='%s', desc='additional parameters')
+    flags = InputMultiPath(traits.Str, argstr='%s', desc='additional parameters')
+
+    # Expert options
+    talairach = traits.Str(desc="Flags to pass to talairach commands", xor=['expert'])
+    mri_normalize = traits.Str(desc="Flags to pass to mri_normalize commands", xor=['expert'])
+    mri_watershed = traits.Str(desc="Flags to pass to mri_watershed commands", xor=['expert'])
+    mri_em_register = traits.Str(desc="Flags to pass to mri_em_register commands", xor=['expert'])
+    mri_ca_normalize = traits.Str(desc="Flags to pass to mri_ca_normalize commands", xor=['expert'])
+    mri_ca_register = traits.Str(desc="Flags to pass to mri_ca_register commands", xor=['expert'])
+    mri_remove_neck = traits.Str(desc="Flags to pass to mri_remove_neck commands", xor=['expert'])
+    mri_ca_label = traits.Str(desc="Flags to pass to mri_ca_label commands", xor=['expert'])
+    mri_segstats = traits.Str(desc="Flags to pass to mri_segstats commands", xor=['expert'])
+    mri_mask = traits.Str(desc="Flags to pass to mri_mask commands", xor=['expert'])
+    mri_segment = traits.Str(desc="Flags to pass to mri_segment commands", xor=['expert'])
+    mri_edit_wm_with_aseg = traits.Str(desc="Flags to pass to mri_edit_wm_with_aseg commands", xor=['expert'])
+    mri_pretess = traits.Str(desc="Flags to pass to mri_pretess commands", xor=['expert'])
+    mri_fill = traits.Str(desc="Flags to pass to mri_fill commands", xor=['expert'])
+    mri_tessellate = traits.Str(desc="Flags to pass to mri_tessellate commands", xor=['expert'])
+    mris_smooth = traits.Str(desc="Flags to pass to mri_smooth commands", xor=['expert'])
+    mris_inflate = traits.Str(desc="Flags to pass to mri_inflate commands", xor=['expert'])
+    mris_sphere = traits.Str(desc="Flags to pass to mris_sphere commands", xor=['expert'])
+    mris_fix_topology = traits.Str(desc="Flags to pass to mris_fix_topology commands", xor=['expert'])
+    mris_make_surfaces = traits.Str(desc="Flags to pass to mris_make_surfaces commands", xor=['expert'])
+    mris_surf2vol = traits.Str(desc="Flags to pass to mris_surf2vol commands", xor=['expert'])
+    mris_register = traits.Str(desc="Flags to pass to mris_register commands", xor=['expert'])
+    mrisp_paint = traits.Str(desc="Flags to pass to mrisp_paint commands", xor=['expert'])
+    mris_ca_label = traits.Str(desc="Flags to pass to mris_ca_label commands", xor=['expert'])
+    mris_anatomical_stats = traits.Str(desc="Flags to pass to mris_anatomical_stats commands", xor=['expert'])
+    mri_aparc2aseg = traits.Str(desc="Flags to pass to mri_aparc2aseg commands", xor=['expert'])
 
 
 class ReconAllOutputSpec(FreeSurferSource.output_spec):
@@ -655,9 +716,46 @@ class ReconAll(CommandLine):
     >>> reconall.inputs.directive = 'all'
     >>> reconall.inputs.subjects_dir = '.'
     >>> reconall.inputs.T1_files = 'structural.nii'
-    >>> reconall.cmdline # doctest: +ALLOW_UNICODE
+    >>> reconall.cmdline
     'recon-all -all -i structural.nii -subjid foo -sd .'
+    >>> reconall.inputs.flags = "-qcache"
+    >>> reconall.cmdline
+    'recon-all -all -i structural.nii -qcache -subjid foo -sd .'
+    >>> reconall.inputs.flags = ["-cw256", "-qcache"]
+    >>> reconall.cmdline
+    'recon-all -all -i structural.nii -cw256 -qcache -subjid foo -sd .'
 
+    Hemisphere may be specified regardless of directive:
+
+    >>> reconall.inputs.flags = []
+    >>> reconall.inputs.hemi = 'lh'
+    >>> reconall.cmdline
+    'recon-all -all -i structural.nii -hemi lh -subjid foo -sd .'
+
+    ``-autorecon-hemi`` uses the ``-hemi`` input to specify the hemisphere
+    to operate upon:
+
+    >>> reconall.inputs.directive = 'autorecon-hemi'
+    >>> reconall.cmdline
+    'recon-all -autorecon-hemi lh -i structural.nii -subjid foo -sd .'
+
+    Hippocampal subfields can accept T1 and T2 images:
+
+    >>> reconall_subfields = ReconAll()
+    >>> reconall_subfields.inputs.subject_id = 'foo'
+    >>> reconall_subfields.inputs.directive = 'all'
+    >>> reconall_subfields.inputs.subjects_dir = '.'
+    >>> reconall_subfields.inputs.T1_files = 'structural.nii'
+    >>> reconall_subfields.inputs.hippocampal_subfields_T1 = True
+    >>> reconall_subfields.cmdline
+    'recon-all -all -i structural.nii -hippocampal-subfields-T1 -subjid foo -sd .'
+    >>> reconall_subfields.inputs.hippocampal_subfields_T2 = (
+    ... 'structural.nii', 'test')
+    >>> reconall_subfields.cmdline
+    'recon-all -all -i structural.nii -hippocampal-subfields-T1T2 structural.nii test -subjid foo -sd .'
+    >>> reconall_subfields.inputs.hippocampal_subfields_T1 = False
+    >>> reconall_subfields.cmdline
+    'recon-all -all -i structural.nii -hippocampal-subfields-T2 structural.nii test -subjid foo -sd .'
     """
 
     _cmd = 'recon-all'
@@ -665,6 +763,7 @@ class ReconAll(CommandLine):
     input_spec = ReconAllInputSpec
     output_spec = ReconAllOutputSpec
     _can_resume = True
+    force_run = False
 
     # Steps are based off of the recon-all tables [0,1] describing, inputs,
     # commands, and outputs of each step of the recon-all process,
@@ -687,12 +786,12 @@ class ReconAll(CommandLine):
                        ], []),
         ('nuintensitycor', ['mri/nu.mgz'], []),
         ('normalization', ['mri/T1.mgz'], []),
-        ('skullstrip', ['mri/talairach_with_skull.lta',
+        ('skullstrip', ['mri/transforms/talairach_with_skull.lta',
                         'mri/brainmask.auto.mgz',
                         'mri/brainmask.mgz'], []),
         ]
-    if LooseVersion(FSVersion) < LooseVersion("6.0.0"):
-        _autorecon2_steps = [
+    if Info.looseversion() < LooseVersion("6.0.0"):
+        _autorecon2_volonly_steps = [
             ('gcareg', ['mri/transforms/talairach.lta'], []),
             ('canorm', ['mri/norm.mgz'], []),
             ('careg', ['mri/transforms/talairach.m3z'], []),
@@ -713,52 +812,51 @@ class ReconAll(CommandLine):
             ('fill', ['mri/filled.mgz',
                       # 'scripts/ponscc.cut.log',
                       ], []),
-            ('tessellate', ['surf/lh.orig.nofix', 'surf/rh.orig.nofix'], []),
-            ('smooth1', ['surf/lh.smoothwm.nofix', 'surf/rh.smoothwm.nofix'],
-             []),
-            ('inflate1', ['surf/lh.inflated.nofix', 'surf/rh.inflated.nofix'],
-             []),
-            ('qsphere', ['surf/lh.qsphere.nofix', 'surf/rh.qsphere.nofix'],
-             []),
-            ('fix', ['surf/lh.orig', 'surf/rh.orig'], []),
-            ('white', ['surf/lh.white', 'surf/rh.white',
-                       'surf/lh.curv', 'surf/rh.curv',
-                       'surf/lh.area', 'surf/rh.area',
-                       'label/lh.cortex.label', 'label/rh.cortex.label'], []),
-            ('smooth2', ['surf/lh.smoothwm', 'surf/rh.smoothwm'], []),
-            ('inflate2', ['surf/lh.inflated', 'surf/rh.inflated',
-                          'surf/lh.sulc', 'surf/rh.sulc',
-                          'surf/lh.inflated.H', 'surf/rh.inflated.H',
-                          'surf/lh.inflated.K', 'surf/rh.inflated.K'], []),
             ]
-        _autorecon3_steps = [
-            ('sphere', ['surf/lh.sphere', 'surf/rh.sphere'], []),
-            ('surfreg', ['surf/lh.sphere.reg', 'surf/rh.sphere.reg'], []),
-            ('jacobian_white', ['surf/lh.jacobian_white',
-                                'surf/rh.jacobian_white'], []),
-            ('avgcurv', ['surf/lh.avg_curv', 'surf/rh.avg_curv'], []),
-            ('cortparc', ['label/lh.aparc.annot', 'label/rh.aparc.annot'], []),
-            ('pial', ['surf/lh.pial', 'surf/rh.pial',
-                      'surf/lh.curv.pial', 'surf/rh.curv.pial',
-                      'surf/lh.area.pial', 'surf/rh.area.pial',
-                      'surf/lh.thickness', 'surf/rh.thickness'], []),
-            ('cortparc2', ['label/lh.aparc.a2009s.annot',
-                           'label/rh.aparc.a2009s.annot'], []),
-            ('parcstats2', ['stats/lh.aparc.a2009s.stats',
-                            'stats/rh.aparc.a2009s.stats',
-                            'stats/aparc.annot.a2009s.ctab'], []),
+        _autorecon2_lh_steps = [
+            ('tessellate', ['surf/lh.orig.nofix'], []),
+            ('smooth1', ['surf/lh.smoothwm.nofix'], []),
+            ('inflate1', ['surf/lh.inflated.nofix'], []),
+            ('qsphere', ['surf/lh.qsphere.nofix'], []),
+            ('fix', ['surf/lh.orig'], []),
+            ('white', ['surf/lh.white', 'surf/lh.curv', 'surf/lh.area',
+                       'label/lh.cortex.label'], []),
+            ('smooth2', ['surf/lh.smoothwm'], []),
+            ('inflate2', ['surf/lh.inflated', 'surf/lh.sulc',
+                          'surf/lh.inflated.H', 'surf/lh.inflated.K'], []),
+            # Undocumented in ReconAllTableStableV5.3
+            ('curvstats', ['stats/lh.curv.stats'], []),
+            ]
+        _autorecon3_lh_steps = [
+            ('sphere', ['surf/lh.sphere'], []),
+            ('surfreg', ['surf/lh.sphere.reg'], []),
+            ('jacobian_white', ['surf/lh.jacobian_white'], []),
+            ('avgcurv', ['surf/lh.avg_curv'], []),
+            ('cortparc', ['label/lh.aparc.annot'], []),
+            ('pial', ['surf/lh.pial', 'surf/lh.curv.pial', 'surf/lh.area.pial',
+                      'surf/lh.thickness'], []),
+            # Misnamed outputs in ReconAllTableStableV5.3: ?h.w-c.pct.mgz
+            ('pctsurfcon', ['surf/lh.w-g.pct.mgh'], []),
+            ('parcstats', ['stats/lh.aparc.stats'], []),
+            ('cortparc2', ['label/lh.aparc.a2009s.annot'], []),
+            ('parcstats2', ['stats/lh.aparc.a2009s.stats'], []),
+            # Undocumented in ReconAllTableStableV5.3
+            ('cortparc3', ['label/lh.aparc.DKTatlas40.annot'], []),
+            # Undocumented in ReconAllTableStableV5.3
+            ('parcstats3', ['stats/lh.aparc.a2009s.stats'], []),
+            ('label-exvivo-ec', ['label/lh.entorhinal_exvivo.label'], []),
+            ]
+        _autorecon3_added_steps = [
             ('cortribbon', ['mri/lh.ribbon.mgz', 'mri/rh.ribbon.mgz',
                             'mri/ribbon.mgz'], []),
             ('segstats', ['stats/aseg.stats'], []),
             ('aparc2aseg', ['mri/aparc+aseg.mgz',
                             'mri/aparc.a2009s+aseg.mgz'], []),
             ('wmparc', ['mri/wmparc.mgz', 'stats/wmparc.stats'], []),
-            ('balabels', ['BA.ctab', 'BA.thresh.ctab'], []),
-            ('label-exvivo-ec', ['label/lh.entorhinal_exvivo.label',
-                                 'label/rh.entorhinal_exvivo.label'], []),
+            ('balabels', ['label/BA.ctab', 'label/BA.thresh.ctab'], []),
             ]
     else:
-        _autorecon2_steps = [
+        _autorecon2_volonly_steps = [
             ('gcareg', ['mri/transforms/talairach.lta'], []),
             ('canorm', ['mri/norm.mgz'], []),
             ('careg', ['mri/transforms/talairach.m3z'], []),
@@ -773,53 +871,40 @@ class ReconAll(CommandLine):
             ('fill', ['mri/filled.mgz',
                       # 'scripts/ponscc.cut.log',
                       ], []),
-            ('tessellate', ['surf/lh.orig.nofix', 'surf/rh.orig.nofix'], []),
-            ('smooth1', ['surf/lh.smoothwm.nofix', 'surf/rh.smoothwm.nofix'],
-             []),
-            ('inflate1', ['surf/lh.inflated.nofix', 'surf/rh.inflated.nofix'],
-             []),
-            ('qsphere', ['surf/lh.qsphere.nofix', 'surf/rh.qsphere.nofix'],
-             []),
-            ('fix', ['surf/lh.orig', 'surf/rh.orig'], []),
-            ('white', ['surf/lh.white.preaparc', 'surf/rh.white.preaparc',
-                       'surf/lh.curv', 'surf/rh.curv',
-                       'surf/lh.area', 'surf/rh.area',
-                       'label/lh.cortex.label', 'label/rh.cortex.label'], []),
-            ('smooth2', ['surf/lh.smoothwm', 'surf/rh.smoothwm'], []),
-            ('inflate2', ['surf/lh.inflated', 'surf/rh.inflated',
-                          'surf/lh.sulc', 'surf/rh.sulc'], []),
-            ('curvHK', ['surf/lh.white.H', 'surf/rh.white.H',
-                        'surf/lh.white.K', 'surf/rh.white.K',
-                        'surf/lh.inflated.H', 'surf/rh.inflated.H',
-                        'surf/lh.inflated.K', 'surf/rh.inflated.K'], []),
-            ('curvstats', ['stats/lh.curv.stats', 'stats/rh.curv.stats'], []),
             ]
-        _autorecon3_steps = [
-            ('sphere', ['surf/lh.sphere', 'surf/rh.sphere'], []),
-            ('surfreg', ['surf/lh.sphere.reg', 'surf/rh.sphere.reg'], []),
-            ('jacobian_white', ['surf/lh.jacobian_white',
-                                'surf/rh.jacobian_white'], []),
-            ('avgcurv', ['surf/lh.avg_curv', 'surf/rh.avg_curv'], []),
-            ('cortparc', ['label/lh.aparc.annot', 'label/rh.aparc.annot'], []),
-            ('pial', ['surf/lh.pial', 'surf/rh.pial',
-                      'surf/lh.curv.pial', 'surf/rh.curv.pial',
-                      'surf/lh.area.pial', 'surf/rh.area.pial',
-                      'surf/lh.thickness', 'surf/rh.thickness'], []),
+        _autorecon2_lh_steps = [
+            ('tessellate', ['surf/lh.orig.nofix'], []),
+            ('smooth1', ['surf/lh.smoothwm.nofix'], []),
+            ('inflate1', ['surf/lh.inflated.nofix'], []),
+            ('qsphere', ['surf/lh.qsphere.nofix'], []),
+            ('fix', ['surf/lh.orig'], []),
+            ('white', ['surf/lh.white.preaparc', 'surf/lh.curv',
+                       'surf/lh.area', 'label/lh.cortex.label'], []),
+            ('smooth2', ['surf/lh.smoothwm'], []),
+            ('inflate2', ['surf/lh.inflated', 'surf/lh.sulc'], []),
+            ('curvHK', ['surf/lh.white.H', 'surf/lh.white.K',
+                        'surf/lh.inflated.H', 'surf/lh.inflated.K'], []),
+            ('curvstats', ['stats/lh.curv.stats'], []),
+            ]
+        _autorecon3_lh_steps = [
+            ('sphere', ['surf/lh.sphere'], []),
+            ('surfreg', ['surf/lh.sphere.reg'], []),
+            ('jacobian_white', ['surf/lh.jacobian_white'], []),
+            ('avgcurv', ['surf/lh.avg_curv'], []),
+            ('cortparc', ['label/lh.aparc.annot'], []),
+            ('pial', ['surf/lh.pial', 'surf/lh.curv.pial',
+                      'surf/lh.area.pial', 'surf/lh.thickness',
+                      'surf/lh.white'], []),
+            ('parcstats', ['stats/lh.aparc.stats'], []),
+            ('cortparc2', ['label/lh.aparc.a2009s.annot'], []),
+            ('parcstats2', ['stats/lh.aparc.a2009s.stats'], []),
+            ('cortparc3', ['label/lh.aparc.DKTatlas.annot'], []),
+            ('parcstats3', ['stats/lh.aparc.DKTatlas.stats'], []),
+            ('pctsurfcon', ['surf/lh.w-g.pct.mgh'], []),
+            ]
+        _autorecon3_added_steps = [
             ('cortribbon', ['mri/lh.ribbon.mgz', 'mri/rh.ribbon.mgz',
                             'mri/ribbon.mgz'], []),
-            ('parcstats', ['stats/lh.aparc.astats', 'stats/rh.aparc.stats',
-                           'stats/aparc.annot.ctab'], []),
-            ('cortparc2', ['label/lh.aparc.a2009s.annot',
-                           'label/rh.aparc.a2009s.annot'], []),
-            ('parcstats2', ['stats/lh.aparc.a2009s.stats',
-                            'stats/rh.aparc.a2009s.stats',
-                            'stats/aparc.annot.a2009s.ctab'], []),
-            ('cortparc3', ['label/lh.aparc.DKTatlas.annot',
-                           'label/rh.aparc.DKTatlas.annot'], []),
-            ('parcstats3', ['stats/lh.aparc.DKTatlas.stats',
-                            'stats/rh.aparc.DKTatlas.stats',
-                            'stats/aparc.annot.DKTatlas.ctab'], []),
-            ('pctsurfcon', ['surf/lh.w-g.pct.mgh', 'surf/rh.w-g.pct.mgh'], []),
             ('hyporelabel', ['mri/aseg.presurf.hypos.mgz'], []),
             ('aparc2aseg', ['mri/aparc+aseg.mgz',
                             'mri/aparc.a2009s+aseg.mgz',
@@ -827,12 +912,49 @@ class ReconAll(CommandLine):
             ('apas2aseg', ['mri/aseg.mgz'], ['mri/aparc+aseg.mgz']),
             ('segstats', ['stats/aseg.stats'], []),
             ('wmparc', ['mri/wmparc.mgz', 'stats/wmparc.stats'], []),
-            ('balabels', ['BA.ctab', 'BA.thresh.ctab',
+            # Note that this is a very incomplete list; however the ctab
+            # files are last to be touched, so this should be reasonable
+            ('balabels', ['label/BA_exvivo.ctab',
+                          'label/BA_exvivo.thresh.ctab',
                           'label/lh.entorhinal_exvivo.label',
                           'label/rh.entorhinal_exvivo.label'], []),
             ]
 
+    # Fill out autorecon2 steps
+    _autorecon2_rh_steps = [
+        (step, [out.replace('lh', 'rh') for out in outs], ins)
+        for step, outs, ins in _autorecon2_lh_steps]
+    _autorecon2_perhemi_steps = [
+        (step, [of for out in outs
+                for of in (out, out.replace('lh', 'rh'))], ins)
+        for step, outs, ins in _autorecon2_lh_steps]
+    _autorecon2_steps = _autorecon2_volonly_steps + _autorecon2_perhemi_steps
+
+    # Fill out autorecon3 steps
+    _autorecon3_rh_steps = [
+        (step, [out.replace('lh', 'rh') for out in outs], ins)
+        for step, outs, ins in _autorecon3_lh_steps]
+    _autorecon3_perhemi_steps = [
+        (step, [of for out in outs
+                for of in (out, out.replace('lh', 'rh'))], ins)
+        for step, outs, ins in _autorecon3_lh_steps]
+    _autorecon3_steps = _autorecon3_perhemi_steps + _autorecon3_added_steps
+
+    # Fill out autorecon-hemi lh/rh steps
+    _autorecon_lh_steps = (_autorecon2_lh_steps + _autorecon3_lh_steps)
+    _autorecon_rh_steps = (_autorecon2_rh_steps + _autorecon3_rh_steps)
+
     _steps = _autorecon1_steps + _autorecon2_steps + _autorecon3_steps
+
+    _binaries = ['talairach', 'mri_normalize', 'mri_watershed',
+                 'mri_em_register', 'mri_ca_normalize', 'mri_ca_register',
+                 'mri_remove_neck', 'mri_ca_label', 'mri_segstats',
+                 'mri_mask', 'mri_segment', 'mri_edit_wm_with_aseg',
+                 'mri_pretess', 'mri_fill', 'mri_tessellate', 'mris_smooth',
+                 'mris_inflate', 'mris_sphere', 'mris_fix_topology',
+                 'mris_make_surfaces', 'mris_surf2vol', 'mris_register',
+                 'mrisp_paint', 'mris_ca_label', 'mris_anatomical_stats',
+                 'mri_aparc2aseg']
 
     def _gen_subjects_dir(self):
         return os.getcwd()
@@ -877,34 +999,132 @@ class ReconAll(CommandLine):
     def _format_arg(self, name, trait_spec, value):
         if name == 'T1_files':
             if self._is_resuming():
-                return ''
+                return None
+        if name == 'hippocampal_subfields_T1' and \
+                isdefined(self.inputs.hippocampal_subfields_T2):
+            return None
+        if all((name == 'hippocampal_subfields_T2',
+                isdefined(self.inputs.hippocampal_subfields_T1) and
+                self.inputs.hippocampal_subfields_T1)):
+            argstr = trait_spec.argstr.replace('T2', 'T1T2')
+            return argstr % value
+        if name == 'directive' and value == 'autorecon-hemi':
+            if not isdefined(self.inputs.hemi):
+                raise ValueError("Directive 'autorecon-hemi' requires hemi "
+                                 "input to be set")
+            value += ' ' + self.inputs.hemi
+        if all((name == 'hemi',
+                isdefined(self.inputs.directive) and
+                self.inputs.directive == 'autorecon-hemi')):
+            return None
         return super(ReconAll, self)._format_arg(name, trait_spec, value)
 
     @property
     def cmdline(self):
         cmd = super(ReconAll, self).cmdline
+
+        # Adds '-expert' flag if expert flags are passed
+        # Mutually exclusive with 'expert' input parameter
+        cmd += self._prep_expert_file()
+
         if not self._is_resuming():
             return cmd
         subjects_dir = self.inputs.subjects_dir
         if not isdefined(subjects_dir):
             subjects_dir = self._gen_subjects_dir()
 
+        # Check only relevant steps
+        directive = self.inputs.directive
+        if not isdefined(directive):
+            steps = []
+        elif directive == 'autorecon1':
+            steps = self._autorecon1_steps
+        elif directive == 'autorecon2-volonly':
+            steps = self._autorecon2_volonly_steps
+        elif directive == 'autorecon2-perhemi':
+            steps = self._autorecon2_perhemi_steps
+        elif directive.startswith('autorecon2'):
+            if isdefined(self.inputs.hemi):
+                if self.inputs.hemi == 'lh':
+                    steps = (self._autorecon2_volonly_steps +
+                             self._autorecon2_lh_steps)
+                else:
+                    steps = (self._autorecon2_volonly_steps +
+                             self._autorecon2_rh_steps)
+            else:
+                steps = self._autorecon2_steps
+        elif directive == 'autorecon-hemi':
+            if self.inputs.hemi == 'lh':
+                steps = self._autorecon_lh_steps
+            else:
+                steps = self._autorecon_rh_steps
+        elif directive == 'autorecon3':
+            steps = self._autorecon3_steps
+        else:
+            steps = self._steps
+
+        no_run = True
         flags = []
-        for idx, step in enumerate(self._steps):
-            step, outfiles, infiles = step
+        for step, outfiles, infiles in steps:
             flag = '-{}'.format(step)
             noflag = '-no{}'.format(step)
-            if flag in cmd or noflag in cmd:
+            if noflag in cmd:
+                continue
+            elif flag in cmd:
+                no_run = False
                 continue
 
             subj_dir = os.path.join(subjects_dir, self.inputs.subject_id)
             if check_depends([os.path.join(subj_dir, f) for f in outfiles],
                              [os.path.join(subj_dir, f) for f in infiles]):
                 flags.append(noflag)
-        cmd += ' ' + ' '.join(flags)
+            else:
+                no_run = False
 
-        iflogger.info('resume recon-all : %s' % cmd)
+        if no_run and not self.force_run:
+            iflogger.info('recon-all complete : Not running')
+            return "echo recon-all: nothing to do"
+
+        cmd += ' ' + ' '.join(flags)
+        iflogger.info('resume recon-all : %s', cmd)
         return cmd
+
+    def _prep_expert_file(self):
+        if isdefined(self.inputs.expert):
+            return ''
+
+        lines = []
+        for binary in self._binaries:
+            args = getattr(self.inputs, binary)
+            if isdefined(args):
+                lines.append('{} {}\n'.format(binary, args))
+
+        if lines == []:
+            return ''
+
+        contents = ''.join(lines)
+        if not isdefined(self.inputs.xopts) and \
+                self._get_expert_file() == contents:
+            return ' -xopts-use'
+
+        expert_fname = os.path.abspath('expert.opts')
+        with open(expert_fname, 'w') as fobj:
+            fobj.write(contents)
+        return ' -expert {}'.format(expert_fname)
+
+    def _get_expert_file(self):
+        # Read pre-existing options file, if it exists
+        if isdefined(self.inputs.subjects_dir):
+            subjects_dir = self.inputs.subjects_dir
+        else:
+            subjects_dir = self._gen_subjects_dir()
+
+        xopts_file = os.path.join(subjects_dir, self.inputs.subject_id,
+                                  'scripts', 'expert-options')
+        if not os.path.exists(xopts_file):
+            return ''
+        with open(xopts_file, 'r') as fobj:
+            return fobj.read()
 
 
 class BBRegisterInputSpec(FSTraitedSpec):
@@ -920,7 +1140,7 @@ class BBRegisterInputSpec(FSTraitedSpec):
     init_reg_file = File(exists=True, argstr='--init-reg %s',
                          desc='existing registration file',
                          xor=['init'], mandatory=True)
-    contrast_type = traits.Enum('t1', 't2', argstr='--%s',
+    contrast_type = traits.Enum('t1', 't2', 'bold', 'dti', argstr='--%s',
                                 desc='contrast type of image',
                                 mandatory=True)
     intermediate_file = File(exists=True, argstr="--int %s",
@@ -936,45 +1156,57 @@ class BBRegisterInputSpec(FSTraitedSpec):
                             desc="force use of nifti rather than analyze with SPM")
     epi_mask = traits.Bool(argstr="--epi-mask",
                            desc="mask out B0 regions in stages 1 and 2")
+    dof = traits.Enum(6, 9, 12, argstr='--%d',
+                      desc='number of transform degrees of freedom')
+    fsldof = traits.Int(argstr='--fsl-dof %d',
+                        desc='degrees of freedom for initial registration (FSL)')
     out_fsl_file = traits.Either(traits.Bool, File, argstr="--fslmat %s",
                                  desc="write the transformation matrix in FSL FLIRT format")
+    out_lta_file = traits.Either(traits.Bool, File, argstr="--lta %s", min_ver='5.2.0',
+                                 desc="write the transformation matrix in LTA format")
     registered_file = traits.Either(traits.Bool, File, argstr='--o %s',
                                     desc='output warped sourcefile either True or filename')
+    init_cost_file = traits.Either(traits.Bool, File, argstr='--initcost %s',
+                                   desc='output initial registration cost file')
 
 
 class BBRegisterInputSpec6(BBRegisterInputSpec):
     init = traits.Enum('coreg', 'rr', 'spm', 'fsl', 'header', 'best', argstr='--init-%s',
-                       usedefault=True, xor=['init_reg_file'],
+                       xor=['init_reg_file'],
                        desc='initialize registration with mri_coreg, spm, fsl, or header')
+    init_reg_file = File(exists=True, argstr='--init-reg %s',
+                         desc='existing registration file',
+                         xor=['init'])
 
 
 class BBRegisterOutputSpec(TraitedSpec):
     out_reg_file = File(exists=True, desc='Output registration file')
-    out_fsl_file = File(desc='Output FLIRT-style registration file')
+    out_fsl_file = File(exists=True, desc='Output FLIRT-style registration file')
+    out_lta_file = File(exists=True, desc='Output LTA-style registration file')
     min_cost_file = File(exists=True, desc='Output registration minimum cost file')
-    registered_file = File(desc='Registered and resampled source file')
+    init_cost_file = File(exists=True, desc='Output initial registration cost file')
+    registered_file = File(exists=True, desc='Registered and resampled source file')
 
 
 class BBRegister(FSCommand):
     """Use FreeSurfer bbregister to register a volume to the Freesurfer anatomical.
 
     This program performs within-subject, cross-modal registration using a
-    boundary-based cost function. The registration is constrained to be 6
-    DOF (rigid). It is required that you have an anatomical scan of the
-    subject that has already been recon-all-ed using freesurfer.
+    boundary-based cost function. It is required that you have an anatomical
+    scan of the subject that has already been recon-all-ed using freesurfer.
 
     Examples
     --------
 
     >>> from nipype.interfaces.freesurfer import BBRegister
     >>> bbreg = BBRegister(subject_id='me', source_file='structural.nii', init='header', contrast_type='t2')
-    >>> bbreg.cmdline # doctest: +ALLOW_UNICODE
+    >>> bbreg.cmdline
     'bbregister --t2 --init-header --reg structural_bbreg_me.dat --mov structural.nii --s me'
 
     """
 
     _cmd = 'bbregister'
-    if LooseVersion(FSVersion) < LooseVersion("6.0.0"):
+    if LooseVersion('0.0.0') < Info.looseversion() < LooseVersion("6.0.0"):
         input_spec = BBRegisterInputSpec
     else:
         input_spec = BBRegisterInputSpec6
@@ -1000,6 +1232,16 @@ class BBRegister(FSCommand):
             else:
                 outputs['registered_file'] = op.abspath(_in.registered_file)
 
+        if isdefined(_in.out_lta_file):
+            if isinstance(_in.out_lta_file, bool):
+                suffix = '_bbreg_%s.lta' % _in.subject_id
+                out_lta_file = fname_presuffix(_in.source_file,
+                                               suffix=suffix,
+                                               use_ext=False)
+                outputs['out_lta_file'] = out_lta_file
+            else:
+                outputs['out_lta_file'] = op.abspath(_in.out_lta_file)
+
         if isdefined(_in.out_fsl_file):
             if isinstance(_in.out_fsl_file, bool):
                 suffix = '_bbreg_%s.mat' % _in.subject_id
@@ -1010,17 +1252,19 @@ class BBRegister(FSCommand):
             else:
                 outputs['out_fsl_file'] = op.abspath(_in.out_fsl_file)
 
+        if isdefined(_in.init_cost_file):
+            if isinstance(_in.out_fsl_file, bool):
+                outputs['init_cost_file'] = outputs['out_reg_file'] + '.initcost'
+            else:
+                outputs['init_cost_file'] = op.abspath(_in.init_cost_file)
+
         outputs['min_cost_file'] = outputs['out_reg_file'] + '.mincost'
         return outputs
 
     def _format_arg(self, name, spec, value):
-
-        if name in ['registered_file', 'out_fsl_file']:
-            if isinstance(value, bool):
-                fname = self._list_outputs()[name]
-            else:
-                fname = value
-            return spec.argstr % fname
+        if name in ('registered_file', 'out_fsl_file', 'out_lta_file',
+                    'init_cost_file') and isinstance(value, bool):
+            value = self._list_outputs()[name]
         return super(BBRegister, self)._format_arg(name, spec, value)
 
     def _gen_filename(self, name):
@@ -1045,7 +1289,15 @@ class ApplyVolTransformInputSpec(FSTraitedSpec):
     fs_target = traits.Bool(argstr='--fstarg', xor=_targ_xor, mandatory=True,
                             requires=['reg_file'],
                             desc='use orig.mgz from subject in regfile as target')
-    _reg_xor = ('reg_file', 'fsl_reg_file', 'xfm_reg_file', 'reg_header', 'subject')
+    _reg_xor = ('reg_file', 'lta_file', 'lta_inv_file', 'fsl_reg_file', 'xfm_reg_file',
+                'reg_header', 'mni_152_reg', 'subject')
+    reg_file = File(exists=True, xor=_reg_xor, argstr='--reg %s',
+                    mandatory=True,
+                    desc='tkRAS-to-tkRAS matrix   (tkregister2 format)')
+    lta_file = File(exists=True, xor=_reg_xor, argstr='--lta %s',
+                    mandatory=True, desc='Linear Transform Array file')
+    lta_inv_file = File(exists=True, xor=_reg_xor, argstr='--lta-inv %s',
+                        mandatory=True, desc='LTA, invert')
     reg_file = File(exists=True, xor=_reg_xor, argstr='--reg %s',
                     mandatory=True,
                     desc='tkRAS-to-tkRAS matrix   (tkregister2 format)')
@@ -1058,8 +1310,9 @@ class ApplyVolTransformInputSpec(FSTraitedSpec):
     reg_header = traits.Bool(xor=_reg_xor, argstr='--regheader',
                              mandatory=True,
                              desc='ScannerRAS-to-ScannerRAS matrix = identity')
-    subject = traits.Str(xor=_reg_xor, argstr='--s %s',
-                         mandatory=True,
+    mni_152_reg = traits.Bool(xor=_reg_xor, argstr='--regheader', mandatory=True,
+                              desc='target MNI152 space')
+    subject = traits.Str(xor=_reg_xor, argstr='--s %s', mandatory=True,
                          desc='set matrix = identity and use subject for any templates')
     inverse = traits.Bool(desc='sample from target to source',
                           argstr='--inv')
@@ -1105,7 +1358,7 @@ class ApplyVolTransform(FSCommand):
     >>> applyreg.inputs.reg_file = 'register.dat'
     >>> applyreg.inputs.transformed_file = 'struct_warped.nii'
     >>> applyreg.inputs.fs_target = True
-    >>> applyreg.cmdline # doctest: +ALLOW_UNICODE
+    >>> applyreg.cmdline
     'mri_vol2vol --fstarg --reg register.dat --mov structural.nii --o struct_warped.nii'
 
     """
@@ -1185,7 +1438,7 @@ class Smooth(FSCommand):
 
     >>> from nipype.interfaces.freesurfer import Smooth
     >>> smoothvol = Smooth(in_file='functional.nii', smoothed_file = 'foo_out.nii', reg_file='register.dat', surface_fwhm=10, vol_fwhm=6)
-    >>> smoothvol.cmdline # doctest: +ALLOW_UNICODE
+    >>> smoothvol.cmdline
     'mris_volsmooth --i functional.nii --reg register.dat --o foo_out.nii --fwhm 10.000000 --vol-fwhm 6.000000'
 
     """
@@ -1211,76 +1464,102 @@ class Smooth(FSCommand):
 
 class RobustRegisterInputSpec(FSTraitedSpec):
 
-    source_file = File(mandatory=True, argstr='--mov %s',
+    source_file = File(exists=True, mandatory=True, argstr='--mov %s',
                        desc='volume to be registered')
-    target_file = File(mandatory=True, argstr='--dst %s',
+    target_file = File(exists=True, mandatory=True, argstr='--dst %s',
                        desc='target volume for the registration')
-    out_reg_file = File(genfile=True, argstr='--lta %s',
-                        desc='registration file to write')
-    registered_file = traits.Either(traits.Bool, File, argstr='--warp %s',
-                                    desc='registered image; either True or filename')
-    weights_file = traits.Either(traits.Bool, File, argstr='--weights %s',
-                                 desc='weights image to write; either True or filename')
-    est_int_scale = traits.Bool(argstr='--iscale',
-                                desc='estimate intensity scale (recommended for unnormalized images)')
+    out_reg_file = traits.Either(
+        True, File, default=True, usedefault=True, argstr='--lta %s',
+        desc='registration file; either True or filename')
+    registered_file = traits.Either(
+        traits.Bool, File, argstr='--warp %s',
+        desc='registered image; either True or filename')
+    weights_file = traits.Either(
+        traits.Bool, File, argstr='--weights %s',
+        desc='weights image to write; either True or filename')
+    est_int_scale = traits.Bool(
+        argstr='--iscale',
+        desc='estimate intensity scale (recommended for unnormalized images)')
     trans_only = traits.Bool(argstr='--transonly',
                              desc='find 3 parameter translation only')
     in_xfm_file = File(exists=True, argstr='--transform',
                        desc='use initial transform on source')
-    half_source = traits.Either(traits.Bool, File, argstr='--halfmov %s',
-                                desc="write source volume mapped to halfway space")
-    half_targ = traits.Either(traits.Bool, File, argstr="--halfdst %s",
-                              desc="write target volume mapped to halfway space")
-    half_weights = traits.Either(traits.Bool, File, argstr="--halfweights %s",
-                                 desc="write weights volume mapped to halfway space")
-    half_source_xfm = traits.Either(traits.Bool, File, argstr="--halfmovlta %s",
-                                    desc="write transform from source to halfway space")
-    half_targ_xfm = traits.Either(traits.Bool, File, argstr="--halfdstlta %s",
-                                  desc="write transform from target to halfway space")
-    auto_sens = traits.Bool(argstr='--satit', xor=['outlier_sens'], mandatory=True,
-                            desc='auto-detect good sensitivity')
-    outlier_sens = traits.Float(argstr='--sat %.4f', xor=['auto_sens'], mandatory=True,
-                                desc='set outlier sensitivity explicitly')
-    least_squares = traits.Bool(argstr='--leastsquares',
-                                desc='use least squares instead of robust estimator')
+    half_source = traits.Either(
+        traits.Bool, File, argstr='--halfmov %s',
+        desc="write source volume mapped to halfway space")
+    half_targ = traits.Either(
+        traits.Bool, File, argstr="--halfdst %s",
+        desc="write target volume mapped to halfway space")
+    half_weights = traits.Either(
+        traits.Bool, File, argstr="--halfweights %s",
+        desc="write weights volume mapped to halfway space")
+    half_source_xfm = traits.Either(
+        traits.Bool, File, argstr="--halfmovlta %s",
+        desc="write transform from source to halfway space")
+    half_targ_xfm = traits.Either(
+        traits.Bool, File, argstr="--halfdstlta %s",
+        desc="write transform from target to halfway space")
+    auto_sens = traits.Bool(
+        argstr='--satit', xor=['outlier_sens'], mandatory=True,
+        desc='auto-detect good sensitivity')
+    outlier_sens = traits.Float(
+        argstr='--sat %.4f', xor=['auto_sens'], mandatory=True,
+        desc='set outlier sensitivity explicitly')
+    least_squares = traits.Bool(
+        argstr='--leastsquares',
+        desc='use least squares instead of robust estimator')
     no_init = traits.Bool(argstr='--noinit', desc='skip transform init')
-    init_orient = traits.Bool(argstr='--initorient',
-                              desc='use moments for initial orient (recommended for stripped brains)')
+    init_orient = traits.Bool(
+        argstr='--initorient',
+        desc='use moments for initial orient (recommended for stripped brains)'
+        )
     max_iterations = traits.Int(argstr='--maxit %d',
                                 desc='maximum # of times on each resolution')
     high_iterations = traits.Int(argstr='--highit %d',
                                  desc='max # of times on highest resolution')
-    iteration_thresh = traits.Float(argstr='--epsit %.3f',
-                                    desc='stop iterations when below threshold')
-    subsample_thresh = traits.Int(argstr='--subsample %d',
-                                  desc='subsample if dimension is above threshold size')
+    iteration_thresh = traits.Float(
+        argstr='--epsit %.3f', desc='stop iterations when below threshold')
+    subsample_thresh = traits.Int(
+        argstr='--subsample %d',
+        desc='subsample if dimension is above threshold size')
     outlier_limit = traits.Float(argstr='--wlimit %.3f',
                                  desc='set maximal outlier limit in satit')
-    write_vo2vox = traits.Bool(argstr='--vox2vox',
-                               desc='output vox2vox matrix (default is RAS2RAS)')
-    no_multi = traits.Bool(argstr='--nomulti', desc='work on highest resolution')
+    write_vo2vox = traits.Bool(
+        argstr='--vox2vox', desc='output vox2vox matrix (default is RAS2RAS)')
+    no_multi = traits.Bool(argstr='--nomulti',
+                           desc='work on highest resolution')
     mask_source = File(exists=True, argstr='--maskmov %s',
                        desc='image to mask source volume with')
     mask_target = File(exists=True, argstr='--maskdst %s',
                        desc='image to mask target volume with')
-    force_double = traits.Bool(argstr='--doubleprec', desc='use double-precision intensities')
-    force_float = traits.Bool(argstr='--floattype', desc='use float intensities')
+    force_double = traits.Bool(argstr='--doubleprec',
+                               desc='use double-precision intensities')
+    force_float = traits.Bool(argstr='--floattype',
+                              desc='use float intensities')
 
 
 class RobustRegisterOutputSpec(TraitedSpec):
 
     out_reg_file = File(exists=True, desc="output registration file")
-    registered_file = File(desc="output image with registration applied")
-    weights_file = File(desc="image of weights used")
-    half_source = File(desc="source image mapped to halfway space")
-    half_targ = File(desc="target image mapped to halfway space")
-    half_weights = File(desc="weights image mapped to halfway space")
-    half_source_xfm = File(desc="transform file to map source image to halfway space")
-    half_targ_xfm = File(desc="transform file to map target image to halfway space")
+    registered_file = File(exists=True,
+                           desc="output image with registration applied")
+    weights_file = File(exists=True, desc="image of weights used")
+    half_source = File(exists=True,
+                       desc="source image mapped to halfway space")
+    half_targ = File(exists=True, desc="target image mapped to halfway space")
+    half_weights = File(exists=True,
+                        desc="weights image mapped to halfway space")
+    half_source_xfm = File(
+        exists=True,
+        desc="transform file to map source image to halfway space")
+    half_targ_xfm = File(
+        exists=True,
+        desc="transform file to map target image to halfway space")
 
 
 class RobustRegister(FSCommand):
-    """Perform intramodal linear registration (translation and rotation) using robust statistics.
+    """Perform intramodal linear registration (translation and rotation) using
+    robust statistics.
 
     Examples
     --------
@@ -1290,13 +1569,13 @@ class RobustRegister(FSCommand):
     >>> reg.inputs.target_file = 'T1.nii'
     >>> reg.inputs.auto_sens = True
     >>> reg.inputs.init_orient = True
-    >>> reg.cmdline # doctest: +ALLOW_UNICODE
-    'mri_robust_register --satit --initorient --lta structural_robustreg.lta --mov structural.nii --dst T1.nii'
+    >>> reg.cmdline # doctest: +ELLIPSIS
+    'mri_robust_register --satit --initorient --lta .../structural_robustreg.lta --mov structural.nii --dst T1.nii'
 
     References
     ----------
-    Reuter, M, Rosas, HD, and Fischl, B, (2010). Highly Accurate Inverse Consistent Registration:
-    A Robust Approach.  Neuroimage 53(4) 1181-96.
+    Reuter, M, Rosas, HD, and Fischl, B, (2010). Highly Accurate Inverse
+        Consistent Registration: A Robust Approach.  Neuroimage 53(4) 1181-96.
 
     """
 
@@ -1305,24 +1584,20 @@ class RobustRegister(FSCommand):
     output_spec = RobustRegisterOutputSpec
 
     def _format_arg(self, name, spec, value):
-        for option in ["registered_file", "weights_file", "half_source", "half_targ",
-                       "half_weights", "half_source_xfm", "half_targ_xfm"]:
-            if name == option:
-                if isinstance(value, bool):
-                    fname = self._list_outputs()[name]
-                else:
-                    fname = value
-                return spec.argstr % fname
+        options = ("out_reg_file", "registered_file", "weights_file",
+                   "half_source", "half_targ", "half_weights",
+                   "half_source_xfm", "half_targ_xfm")
+        if name in options and isinstance(value, bool):
+            value = self._list_outputs()[name]
         return super(RobustRegister, self)._format_arg(name, spec, value)
 
     def _list_outputs(self):
         outputs = self.output_spec().get()
-        outputs['out_reg_file'] = self.inputs.out_reg_file
-        if not isdefined(self.inputs.out_reg_file) and self.inputs.source_file:
-            outputs['out_reg_file'] = fname_presuffix(self.inputs.source_file,
-                                                      suffix='_robustreg.lta', use_ext=False)
-        prefices = dict(src=self.inputs.source_file, trg=self.inputs.target_file)
-        suffices = dict(registered_file=("src", "_robustreg", True),
+        cwd = os.getcwd()
+        prefices = dict(src=self.inputs.source_file,
+                        trg=self.inputs.target_file)
+        suffices = dict(out_reg_file=("src", "_robustreg.lta", False),
+                        registered_file=("src", "_robustreg", True),
                         weights_file=("src", "_robustweights", True),
                         half_source=("src", "_halfway", True),
                         half_targ=("trg", "_halfway", True),
@@ -1331,20 +1606,15 @@ class RobustRegister(FSCommand):
                         half_targ_xfm=("trg", "_robustxfm.lta", False))
         for name, sufftup in list(suffices.items()):
             value = getattr(self.inputs, name)
-            if isdefined(value):
-                if isinstance(value, bool):
+            if value:
+                if value is True:
                     outputs[name] = fname_presuffix(prefices[sufftup[0]],
                                                     suffix=sufftup[1],
-                                                    newpath=os.getcwd(),
+                                                    newpath=cwd,
                                                     use_ext=sufftup[2])
                 else:
-                    outputs[name] = value
+                    outputs[name] = os.path.abspath(value)
         return outputs
-
-    def _gen_filename(self, name):
-        if name == 'out_reg_file':
-            return self._list_outputs()[name]
-        return None
 
 
 class FitMSParamsInputSpec(FSTraitedSpec):
@@ -1376,7 +1646,7 @@ class FitMSParams(FSCommand):
     >>> msfit = FitMSParams()
     >>> msfit.inputs.in_files = ['flash_05.mgz', 'flash_30.mgz']
     >>> msfit.inputs.out_dir = 'flash_parameters'
-    >>> msfit.cmdline # doctest: +ALLOW_UNICODE
+    >>> msfit.cmdline
     'mri_ms_fitparms  flash_05.mgz flash_30.mgz flash_parameters'
 
     """
@@ -1449,7 +1719,7 @@ class SynthesizeFLASH(FSCommand):
     >>> syn.inputs.t1_image = 'T1.mgz'
     >>> syn.inputs.pd_image = 'PD.mgz'
     >>> syn.inputs.out_file = 'flash_30syn.mgz'
-    >>> syn.cmdline # doctest: +ALLOW_UNICODE
+    >>> syn.cmdline
     'mri_synthesize 20.00 30.00 3.000 T1.mgz PD.mgz flash_30syn.mgz'
 
     """
@@ -1476,11 +1746,11 @@ class MNIBiasCorrectionInputSpec(FSTraitedSpec):
     # mandatory
     in_file = File(exists=True, mandatory=True, argstr="--i %s",
                    desc="input volume. Input can be any format accepted by mri_convert.")
+    # optional
     out_file = File(argstr="--o %s", name_source=['in_file'],
                     name_template='%s_output', hash_files=False, keep_extension=True,
                     desc="output volume. Output can be any format accepted by mri_convert. " +
                     "If the output format is COR, then the directory must exist.")
-    # optional
     iterations = traits.Int(4, argstr="--n %d",
                             desc="Number of iterations to run nu_correct. Default is 4. This is the number of times " +
                             "that nu_correct is repeated (ie, using the output from the previous run as the input for " +
@@ -1501,7 +1771,7 @@ class MNIBiasCorrectionInputSpec(FSTraitedSpec):
                         desc="Shrink parameter for finer sampling (default is 4)")
 
 class MNIBiasCorrectionOutputSpec(TraitedSpec):
-    out_file = File(desc="output volume")
+    out_file = File(exists=True, desc="output volume")
 
 
 class MNIBiasCorrection(FSCommand):
@@ -1522,7 +1792,7 @@ class MNIBiasCorrection(FSCommand):
     >>> correct.inputs.iterations = 6
     >>> correct.inputs.protocol_iterations = 1000
     >>> correct.inputs.distance = 50
-    >>> correct.cmdline # doctest: +ALLOW_UNICODE
+    >>> correct.cmdline
     'mri_nu_correct.mni --distance 50 --i norm.mgz --n 6 --o norm_output.mgz --proto-iters 1000'
 
     References:
@@ -1535,11 +1805,6 @@ class MNIBiasCorrection(FSCommand):
     _cmd = "mri_nu_correct.mni"
     input_spec = MNIBiasCorrectionInputSpec
     output_spec = MNIBiasCorrectionOutputSpec
-
-    def _list_outputs(self):
-        outputs = self._outputs().get()
-        outputs["out_file"] = os.path.abspath(self.inputs.out_file)
-        return outputs
 
 
 class WatershedSkullStripInputSpec(FSTraitedSpec):
@@ -1584,7 +1849,7 @@ class WatershedSkullStrip(FSCommand):
     >>> skullstrip.inputs.t1 = True
     >>> skullstrip.inputs.transform = "transforms/talairach_with_skull.lta"
     >>> skullstrip.inputs.out_file = "brainmask.auto.mgz"
-    >>> skullstrip.cmdline # doctest: +ALLOW_UNICODE
+    >>> skullstrip.cmdline
     'mri_watershed -T1 transforms/talairach_with_skull.lta T1.mgz brainmask.auto.mgz'
     """
     _cmd = 'mri_watershed'
@@ -1632,7 +1897,7 @@ class Normalize(FSCommand):
     >>> normalize = freesurfer.Normalize()
     >>> normalize.inputs.in_file = "T1.mgz"
     >>> normalize.inputs.gradient = 1
-    >>> normalize.cmdline # doctest: +ALLOW_UNICODE
+    >>> normalize.cmdline
     'mri_normalize -g 1 T1.mgz T1_norm.mgz'
     """
     _cmd = "mri_normalize"
@@ -1684,7 +1949,7 @@ class CANormalize(FSCommand):
     >>> ca_normalize.inputs.in_file = "T1.mgz"
     >>> ca_normalize.inputs.atlas = "atlas.nii.gz" # in practice use .gca atlases
     >>> ca_normalize.inputs.transform = "trans.mat" # in practice use .lta transforms
-    >>> ca_normalize.cmdline # doctest: +ALLOW_UNICODE
+    >>> ca_normalize.cmdline
     'mri_ca_normalize T1.mgz atlas.nii.gz trans.mat T1_norm.mgz'
     """
     _cmd = "mri_ca_normalize"
@@ -1742,7 +2007,7 @@ class CARegister(FSCommandOpenMP):
     >>> ca_register = freesurfer.CARegister()
     >>> ca_register.inputs.in_file = "norm.mgz"
     >>> ca_register.inputs.out_file = "talairach.m3z"
-    >>> ca_register.cmdline # doctest: +ALLOW_UNICODE
+    >>> ca_register.cmdline
     'mri_ca_register norm.mgz talairach.m3z'
     """
     _cmd = "mri_ca_register"
@@ -1813,7 +2078,7 @@ class CALabel(FSCommandOpenMP):
     >>> ca_label.inputs.out_file = "out.mgz"
     >>> ca_label.inputs.transform = "trans.mat"
     >>> ca_label.inputs.template = "Template_6.nii" # in practice use .gcs extension
-    >>> ca_label.cmdline # doctest: +ALLOW_UNICODE
+    >>> ca_label.cmdline
     'mri_ca_label norm.mgz trans.mat Template_6.nii out.mgz'
     """
     _cmd = "mri_ca_label"
@@ -1887,7 +2152,7 @@ class MRIsCALabel(FSCommandOpenMP):
     >>> ca_label.inputs.sulc = "lh.pial"
     >>> ca_label.inputs.classifier = "im1.nii" # in pracice, use .gcs extension
     >>> ca_label.inputs.smoothwm = "lh.pial"
-    >>> ca_label.cmdline # doctest: +ALLOW_UNICODE
+    >>> ca_label.cmdline
     'mris_ca_label test lh lh.pial im1.nii lh.aparc.annot'
     """
     _cmd = "mris_ca_label"
@@ -1973,7 +2238,7 @@ class SegmentCC(FSCommand):
     >>> SegmentCC_node.inputs.in_norm = "norm.mgz"
     >>> SegmentCC_node.inputs.out_rotation = "cc.lta"
     >>> SegmentCC_node.inputs.subject_id = "test"
-    >>> SegmentCC_node.cmdline # doctest: +ALLOW_UNICODE
+    >>> SegmentCC_node.cmdline
     'mri_cc -aseg aseg.mgz -o aseg.auto.mgz -lta cc.lta test'
     """
 
@@ -2064,7 +2329,7 @@ class SegmentWM(FSCommand):
     >>> SegmentWM_node = freesurfer.SegmentWM()
     >>> SegmentWM_node.inputs.in_file = "norm.mgz"
     >>> SegmentWM_node.inputs.out_file = "wm.seg.mgz"
-    >>> SegmentWM_node.cmdline # doctest: +ALLOW_UNICODE
+    >>> SegmentWM_node.cmdline
     'mri_segment norm.mgz wm.seg.mgz'
     """
 
@@ -2108,7 +2373,7 @@ class EditWMwithAseg(FSCommand):
     >>> editwm.inputs.seg_file = "aseg.mgz"
     >>> editwm.inputs.out_file = "wm.asegedit.mgz"
     >>> editwm.inputs.keep_in = True
-    >>> editwm.cmdline # doctest: +ALLOW_UNICODE
+    >>> editwm.cmdline
     'mri_edit_wm_with_aseg -keep-in T1.mgz norm.mgz aseg.mgz wm.asegedit.mgz'
     """
     _cmd = 'mri_edit_wm_with_aseg'
@@ -2124,13 +2389,38 @@ class EditWMwithAseg(FSCommand):
 class ConcatenateLTAInputSpec(FSTraitedSpec):
     # required
     in_lta1 = File(exists=True, mandatory=True, argstr='%s', position=-3,
-                   desc="maps some src1 to dst1")
-    in_lta2 = File(exists=True, mandatory=True, argstr='%s', position=-2,
-                   desc="maps dst1(src2) to dst2")
-    out_file = File(exists=False, position=-1, argstr='%s',
-                    name_source=['in_lta1'], name_template='%s-long',
-                    hash_files=False, keep_extension=True,
-                    desc="the combined LTA maps: src1 to dst2 = LTA2*LTA1")
+                   desc='maps some src1 to dst1')
+    in_lta2 = traits.Either(
+        File(exists=True), 'identity.nofile', argstr='%s', position=-2,
+        mandatory=True, desc='maps dst1(src2) to dst2')
+    out_file = File(
+        position=-1, argstr='%s', hash_files=False, name_source=['in_lta1'],
+        name_template='%s_concat', keep_extension=True,
+        desc='the combined LTA maps: src1 to dst2 = LTA2*LTA1')
+
+    # Inversion and transform type
+    invert_1 = traits.Bool(argstr='-invert1',
+                           desc='invert in_lta1 before applying it')
+    invert_2 = traits.Bool(argstr='-invert2',
+                           desc='invert in_lta2 before applying it')
+    invert_out = traits.Bool(argstr='-invertout',
+                             desc='invert output LTA')
+    out_type = traits.Enum('VOX2VOX', 'RAS2RAS', argstr='-out_type %d',
+                           desc='set final LTA type')
+
+    # Talairach options
+    tal_source_file = traits.File(
+        exists=True, argstr='-tal %s', position=-5,
+        requires=['tal_template_file'],
+        desc='if in_lta2 is talairach.xfm, specify source for talairach')
+    tal_template_file = traits.File(
+        exists=True, argstr='%s', position=-4, requires=['tal_source_file'],
+        desc='if in_lta2 is talairach.xfm, specify template for talairach')
+
+    subject = traits.Str(argstr='-subject %s',
+                         desc='set subject in output LTA')
+    # Note rmsdiff would be xor out_file, and would be most easily dealt with
+    # in a new interface. -CJM 2017.10.05
 
 
 class ConcatenateLTAOutputSpec(TraitedSpec):
@@ -2139,24 +2429,40 @@ class ConcatenateLTAOutputSpec(TraitedSpec):
 
 
 class ConcatenateLTA(FSCommand):
-    """concatenates two consecutive LTA transformations
-    into one overall transformation, Out = LTA2*LTA1
+    """ Concatenates two consecutive LTA transformations into one overall
+    transformation
+
+    Out = LTA2*LTA1
 
     Examples
     --------
     >>> from nipype.interfaces.freesurfer import ConcatenateLTA
     >>> conc_lta = ConcatenateLTA()
-    >>> conc_lta.inputs.in_lta1 = 'trans.mat'
-    >>> conc_lta.inputs.in_lta2 = 'trans.mat'
-    >>> conc_lta.cmdline # doctest: +ALLOW_UNICODE
-    'mri_concatenate_lta trans.mat trans.mat trans-long.mat'
+    >>> conc_lta.inputs.in_lta1 = 'lta1.lta'
+    >>> conc_lta.inputs.in_lta2 = 'lta2.lta'
+    >>> conc_lta.cmdline
+    'mri_concatenate_lta lta1.lta lta2.lta lta1_concat.lta'
+
+    You can use 'identity.nofile' as the filename for in_lta2, e.g.:
+
+    >>> conc_lta.inputs.in_lta2 = 'identity.nofile'
+    >>> conc_lta.inputs.invert_1 = True
+    >>> conc_lta.inputs.out_file = 'inv1.lta'
+    >>> conc_lta.cmdline
+    'mri_concatenate_lta -invert1 lta1.lta identity.nofile inv1.lta'
+
+    To create a RAS2RAS transform:
+
+    >>> conc_lta.inputs.out_type = 'RAS2RAS'
+    >>> conc_lta.cmdline
+    'mri_concatenate_lta -invert1 -out_type 1 lta1.lta identity.nofile inv1.lta'
     """
 
     _cmd = 'mri_concatenate_lta'
     input_spec = ConcatenateLTAInputSpec
     output_spec = ConcatenateLTAOutputSpec
 
-    def _list_outputs(self):
-        outputs = self.output_spec().get()
-        outputs['out_file'] = os.path.abspath(self.inputs.out_file)
-        return outputs
+    def _format_arg(self, name, spec, value):
+        if name == 'out_type':
+            value = {'VOX2VOX': 0, 'RAS2RAS': 1}[value]
+        return super(ConcatenateLTA, self)._format_arg(name, spec, value)

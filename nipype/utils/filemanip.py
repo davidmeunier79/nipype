@@ -5,15 +5,13 @@
 
 """
 from __future__ import print_function, division, unicode_literals, absolute_import
-from builtins import str, bytes, open
-
-from future import standard_library
-standard_library.install_aliases()
 
 import sys
 import pickle
+import subprocess
 import gzip
 import hashlib
+import locale
 from hashlib import md5
 import os
 import re
@@ -22,15 +20,21 @@ import posixpath
 import simplejson as json
 import numpy as np
 
+from builtins import str, bytes, open
+
 from .. import logging, config
 from .misc import is_container
 from ..interfaces.traits_extension import isdefined
 
-fmlogger = logging.getLogger("filemanip")
+from future import standard_library
+standard_library.install_aliases()
+
+fmlogger = logging.getLogger('utils')
 
 
 related_filetype_sets = [
     ('.hdr', '.img', '.mat'),
+    ('.nii', '.mat'),
     ('.BRIK', '.HEAD'),
 ]
 
@@ -60,13 +64,13 @@ def split_filename(fname):
     --------
     >>> from nipype.utils.filemanip import split_filename
     >>> pth, fname, ext = split_filename('/home/data/subject.nii.gz')
-    >>> pth # doctest: +ALLOW_UNICODE
+    >>> pth
     '/home/data'
 
-    >>> fname # doctest: +ALLOW_UNICODE
+    >>> fname
     'subject'
 
-    >>> ext # doctest: +ALLOW_UNICODE
+    >>> ext
     '.nii.gz'
 
     """
@@ -167,7 +171,7 @@ def fname_presuffix(fname, prefix='', suffix='', newpath=None, use_ext=True):
 
     >>> from nipype.utils.filemanip import fname_presuffix
     >>> fname = 'foo.nii.gz'
-    >>> fname_presuffix(fname,'pre','post','/tmp') # doctest: +ALLOW_UNICODE
+    >>> fname_presuffix(fname,'pre','post','/tmp')
     '/tmp/prefoopost.nii.gz'
 
     """
@@ -236,6 +240,54 @@ def hash_timestamp(afile):
     return md5hex
 
 
+def _generate_cifs_table():
+    """Construct a reverse-length-ordered list of mount points that
+    fall under a CIFS mount.
+
+    This precomputation allows efficient checking for whether a given path
+    would be on a CIFS filesystem.
+
+    On systems without a ``mount`` command, or with no CIFS mounts, returns an
+    empty list.
+    """
+    exit_code, output = subprocess.getstatusoutput("mount")
+    # Not POSIX
+    if exit_code != 0:
+        return []
+
+    # (path, fstype) tuples, sorted by path length (longest first)
+    mount_info = sorted((line.split()[2:5:2] for line in output.splitlines()),
+                        key=lambda x: len(x[0]),
+                        reverse=True)
+    cifs_paths = [path for path, fstype in mount_info if fstype == 'cifs']
+
+    return [mount for mount in mount_info
+            if any(mount[0].startswith(path) for path in cifs_paths)]
+
+
+_cifs_table = _generate_cifs_table()
+
+
+def on_cifs(fname):
+    """ Checks whether a file path is on a CIFS filesystem mounted in a POSIX
+    host (i.e., has the ``mount`` command).
+
+    On Windows, Docker mounts host directories into containers through CIFS
+    shares, which has support for Minshall+French symlinks, or text files that
+    the CIFS driver exposes to the OS as symlinks.
+    We have found that under concurrent access to the filesystem, this feature
+    can result in failures to create or read recently-created symlinks,
+    leading to inconsistent behavior and ``FileNotFoundError``s.
+
+    This check is written to support disabling symlinks on CIFS shares.
+    """
+    # Only the first match (most recent parent) counts
+    for fspath, fstype in _cifs_table:
+        if fname.startswith(fspath):
+            return fstype == 'cifs'
+    return False
+
+
 def copyfile(originalfile, newfile, copy=False, create_new=False,
              hashmethod=None, use_hardlink=False,
              copy_related_files=True):
@@ -287,6 +339,10 @@ def copyfile(originalfile, newfile, copy=False, create_new=False,
     if hashmethod is None:
         hashmethod = config.get('execution', 'hash_method').lower()
 
+    # Don't try creating symlinks on CIFS
+    if copy is False and on_cifs(newfile):
+        copy = True
+
     # Existing file
     # -------------
     # Options:
@@ -312,13 +368,13 @@ def copyfile(originalfile, newfile, copy=False, create_new=False,
             elif hashmethod == 'content':
                 hashfn = hash_infile
             newhash = hashfn(newfile)
-            fmlogger.debug("File: %s already exists,%s, copy:%d" %
-                           (newfile, newhash, copy))
+            fmlogger.debug('File: %s already exists,%s, copy:%d', newfile,
+                           newhash, copy)
             orighash = hashfn(originalfile)
             keep = newhash == orighash
         if keep:
-            fmlogger.debug("File: %s already exists, not overwriting, copy:%d"
-                           % (newfile, copy))
+            fmlogger.debug('File: %s already exists, not overwriting, copy:%d',
+                           newfile, copy)
         else:
             os.unlink(newfile)
 
@@ -329,7 +385,7 @@ def copyfile(originalfile, newfile, copy=False, create_new=False,
     # ~hardlink & ~symlink => copy
     if not keep and use_hardlink:
         try:
-            fmlogger.debug("Linking File: %s->%s" % (newfile, originalfile))
+            fmlogger.debug('Linking File: %s->%s', newfile, originalfile)
             # Use realpath to avoid hardlinking symlinks
             os.link(os.path.realpath(originalfile), newfile)
         except OSError:
@@ -339,7 +395,7 @@ def copyfile(originalfile, newfile, copy=False, create_new=False,
 
     if not keep and not copy and os.name == 'posix':
         try:
-            fmlogger.debug("Symlinking File: %s->%s" % (newfile, originalfile))
+            fmlogger.debug('Symlinking File: %s->%s', newfile, originalfile)
             os.symlink(originalfile, newfile)
         except OSError:
             copy = True  # Disable symlink for associated files
@@ -348,7 +404,7 @@ def copyfile(originalfile, newfile, copy=False, create_new=False,
 
     if not keep:
         try:
-            fmlogger.debug("Copying File: %s->%s" % (newfile, originalfile))
+            fmlogger.debug('Copying File: %s->%s', newfile, originalfile)
             shutil.copyfile(originalfile, newfile)
         except shutil.Error as e:
             fmlogger.warn(e.message)
@@ -530,6 +586,38 @@ def loadpkl(infile):
     return unpkl
 
 
+def crash2txt(filename, record):
+    """ Write out plain text crash file """
+    with open(filename, 'w') as fp:
+        if 'node' in record:
+            node = record['node']
+            fp.write('Node: {}\n'.format(node.fullname))
+            fp.write('Working directory: {}\n'.format(node.output_dir()))
+            fp.write('\n')
+            fp.write('Node inputs:\n{}\n'.format(node.inputs))
+        fp.write(''.join(record['traceback']))
+
+
+def read_stream(stream, logger=None, encoding=None):
+    """
+    Robustly reads a stream, sending a warning to a logger
+    if some decoding error was raised.
+
+    >>> read_stream(bytearray([65, 0xc7, 65, 10, 66]))  # doctest: +ELLIPSIS
+    ['A...A', 'B']
+
+
+    """
+    default_encoding = encoding or locale.getdefaultlocale()[1] or 'UTF-8'
+    logger = logger or fmlogger
+    try:
+        out = stream.decode(default_encoding)
+    except UnicodeDecodeError as err:
+        out = stream.decode(default_encoding, errors='replace')
+        logger.warning('Error decoding string: %s', err)
+    return out.splitlines()
+
+
 def savepkl(filename, record):
     if filename.endswith('pklz'):
         pkl_file = gzip.open(filename, 'wb')
@@ -558,3 +646,20 @@ def write_rst_dict(info, prefix=''):
     for key, value in sorted(info.items()):
         out.append('{}* {} : {}'.format(prefix, key, str(value)))
     return '\n'.join(out) + '\n\n'
+
+
+def dist_is_editable(dist):
+    """Is distribution an editable install?
+
+    Parameters
+    ----------
+    dist : string
+        Package name
+
+    # Borrowed from `pip`'s' API
+    """
+    for path_item in sys.path:
+        egg_link = os.path.join(path_item, dist + '.egg-link')
+        if os.path.isfile(egg_link):
+            return True
+    return False

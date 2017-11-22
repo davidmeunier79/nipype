@@ -6,9 +6,9 @@ from builtins import str
 from builtins import open, open
 
 import os
-import tempfile
+from copy import deepcopy
 
-import pytest
+import pytest, pdb
 from nipype.utils.filemanip import split_filename, filename_to_list
 from .. import preprocess as fsl
 from nipype.interfaces.fsl import Info
@@ -26,11 +26,9 @@ def fsl_name(obj, fname):
 @pytest.fixture()
 def setup_infile(tmpdir):
     ext = Info.output_type_to_ext(Info.output_type())
-    tmp_dir = str(tmpdir)
-    tmp_infile = os.path.join(tmp_dir, 'foo' + ext)
-    open(tmp_infile, 'w')
-
-    return (tmp_infile, tmp_dir)
+    tmp_infile = tmpdir.join('foo' + ext)
+    tmp_infile.open("w")
+    return (tmp_infile.strpath, tmpdir.strpath)
 
 
 @pytest.mark.skipif(no_fsl(), reason="fsl is not installed")
@@ -152,7 +150,7 @@ def test_fast(setup_infile):
 
 
 @pytest.mark.skipif(no_fsl(), reason="fsl is not installed")
-def test_fast_list_outputs(setup_infile):
+def test_fast_list_outputs(setup_infile, tmpdir):
     ''' By default (no -o), FSL's fast command outputs files into the same
     directory as the input files. If the flag -o is set, it outputs files into
     the cwd '''
@@ -165,9 +163,9 @@ def test_fast_list_outputs(setup_infile):
 
     # set up
     tmp_infile, indir = setup_infile
-    cwd = tempfile.mkdtemp()
-    os.chdir(cwd)
-    assert indir != cwd
+    cwd = tmpdir.mkdir("new")
+    cwd.chdir()
+    assert indir != cwd.strpath
     out_basename = 'a_basename'
 
     # run and test
@@ -176,17 +174,17 @@ def test_fast_list_outputs(setup_infile):
     _run_and_test(opts, os.path.join(input_path, input_filename))
 
     opts['out_basename'] = out_basename
-    _run_and_test(opts, os.path.join(cwd, out_basename))
+    _run_and_test(opts, os.path.join(cwd.strpath, out_basename))
 
 
 @pytest.fixture()
 def setup_flirt(tmpdir):
     ext = Info.output_type_to_ext(Info.output_type())
-    tmp_dir = str(tmpdir)
-    _, infile = tempfile.mkstemp(suffix=ext, dir=tmp_dir)
-    _, reffile = tempfile.mkstemp(suffix=ext, dir=tmp_dir)
-
-    return (tmp_dir, infile, reffile)
+    infile = tmpdir.join("infile"+ext)
+    infile.open("w")
+    reffile = tmpdir.join("reffile"+ext)
+    reffile.open("w")
+    return (tmpdir, infile.strpath, reffile.strpath)
 
 
 @pytest.mark.skipif(no_fsl(), reason="fsl is not installed")
@@ -204,6 +202,7 @@ def test_flirt(setup_flirt):
                         out_file='outfile', out_matrix_file='outmat.mat',
                         bins=256,
                         cost='mutualinfo')
+
     flirt_est = fsl.FLIRT(in_file=infile, reference=reffile,
                           out_matrix_file='outmat.mat',
                           bins=256,
@@ -220,12 +219,13 @@ def test_flirt(setup_flirt):
     flirter = fsl.FLIRT()
     # infile not specified
     with pytest.raises(ValueError):
-        flirter.run()
+        flirter.cmdline
     flirter.inputs.in_file = infile
     # reference not specified
     with pytest.raises(ValueError):
-        flirter.run()
+        flirter.cmdline
     flirter.inputs.reference = reffile
+
     # Generate outfile and outmatrix
     pth, fname, ext = split_filename(infile)
     outfile = fsl_name(flirter, '%s_flirt' % fname)
@@ -234,7 +234,21 @@ def test_flirt(setup_flirt):
                                                          outfile, outmat)
     assert flirter.cmdline == realcmd
 
-    _, tmpfile = tempfile.mkstemp(suffix='.nii', dir=tmpdir)
+    # test apply_xfm option
+    axfm = deepcopy(flirter)
+    axfm.inputs.apply_xfm = True
+    # in_matrix_file or uses_qform must be defined
+    with pytest.raises(RuntimeError): axfm.cmdline
+    axfm2 = deepcopy(axfm)
+    # test uses_qform
+    axfm.inputs.uses_qform = True
+    assert axfm.cmdline == (realcmd + ' -applyxfm -usesqform')
+    # test in_matrix_file
+    axfm2.inputs.in_matrix_file = reffile
+    assert axfm2.cmdline == (realcmd + ' -applyxfm -init %s' % reffile)
+
+    tmpfile = tmpdir.join("file4test.nii")
+    tmpfile.open("w")
     # Loop over all inputs, set a reasonable value and make sure the
     # cmdline is updated correctly.
     for key, trait_spec in sorted(fsl.FLIRT.input_spec().traits().items()):
@@ -242,7 +256,8 @@ def test_flirt(setup_flirt):
         if key in ('trait_added', 'trait_modified', 'in_file', 'reference',
                    'environ', 'output_type', 'out_file', 'out_matrix_file',
                    'in_matrix_file', 'apply_xfm', 'ignore_exception',
-                   'terminal_output', 'out_log', 'save_log'):
+                   'resource_monitor', 'terminal_output', 'out_log',
+                   'save_log'):
             continue
         param = None
         value = None
@@ -250,7 +265,7 @@ def test_flirt(setup_flirt):
             param = '-v'
             value = '-v'
         elif isinstance(trait_spec.trait_type, File):
-            value = tmpfile
+            value = tmpfile.strpath
             param = trait_spec.argstr % value
         elif trait_spec.default is False:
             param = trait_spec.argstr
@@ -308,6 +323,12 @@ def test_mcflirt(setup_flirt):
     realcmd = 'mcflirt -in ' + infile + ' -out ' + outfile2
     assert frt.cmdline == realcmd
 
+
+@pytest.mark.skipif(no_fsl(), reason="fsl is not installed")
+def test_mcflirt_opt(setup_flirt):
+    tmpdir, infile, reffile = setup_flirt
+    _, nme = os.path.split(infile)
+
     opt_map = {
         'cost': ('-cost mutualinfo', 'mutualinfo'),
         'bins': ('-bins 256', 256),
@@ -328,6 +349,9 @@ def test_mcflirt(setup_flirt):
 
     for name, settings in list(opt_map.items()):
         fnt = fsl.MCFLIRT(in_file=infile, **{name: settings[1]})
+        outfile = os.path.join(os.getcwd(), nme)
+        outfile = fnt._gen_fname(outfile, suffix='_mcf')
+
         instr = '-in %s' % (infile)
         outstr = '-out %s' % (outfile)
         if name in ('init', 'cost', 'dof', 'mean_vol', 'bins'):
@@ -341,10 +365,14 @@ def test_mcflirt(setup_flirt):
                                             outstr,
                                             settings[0]])
 
+
+@pytest.mark.skipif(no_fsl(), reason="fsl is not installed")
+def test_mcflirt_noinput():
     # Test error is raised when missing required args
     fnt = fsl.MCFLIRT()
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as excinfo:
         fnt.run()
+    assert str(excinfo.value).startswith("MCFLIRT requires a value for input 'in_file'")
 
 # test fnirt
 
@@ -353,7 +381,7 @@ def test_mcflirt(setup_flirt):
 def test_fnirt(setup_flirt):
 
     tmpdir, infile, reffile = setup_flirt
-    os.chdir(tmpdir)
+    tmpdir.chdir()
     fnirt = fsl.FNIRT()
     assert fnirt.cmd == 'fnirt'
 
@@ -364,7 +392,8 @@ def test_fnirt(setup_flirt):
               ('in_fwhm', '--infwhm', [4, 2, 2, 0], '4,2,2,0'),
               ('apply_refmask', '--applyrefmask', [0, 0, 1, 1], '0,0,1,1'),
               ('apply_inmask', '--applyinmask', [0, 0, 0, 1], '0,0,0,1'),
-              ('regularization_lambda', '--lambda', [0.5, 0.75], '0.5,0.75')]
+              ('regularization_lambda', '--lambda', [0.5, 0.75], '0.5,0.75'),
+              ('intensity_mapping_model', '--intmod', 'global_non_linear', 'global_non_linear')]
     for item, flag, val, strval in params:
         fnirt = fsl.FNIRT(in_file=infile,
                           ref_file=reffile,
@@ -377,7 +406,7 @@ def test_fnirt(setup_flirt):
                   ' %s=%s --ref=%s'\
                   ' --iout=%s' % (infile, log,
                                   flag, strval, reffile, iout)
-        elif item in ('in_fwhm'):
+        elif item in ('in_fwhm', 'intensity_mapping_model'):
             cmd = 'fnirt --in=%s %s=%s --logout=%s '\
                   '--ref=%s --iout=%s' % (infile, flag,
                                           strval, log, reffile, iout)
@@ -518,11 +547,10 @@ def setup_fugue(tmpdir):
     import os.path as op
 
     d = np.ones((80, 80, 80))
-    tmp_dir = str(tmpdir)
-    infile = op.join(tmp_dir, 'dumbfile.nii.gz')
+    infile = tmpdir.join('dumbfile.nii.gz').strpath
     nb.Nifti1Image(d, None, None).to_filename(infile)
 
-    return (tmp_dir, infile)
+    return (tmpdir, infile)
 
 
 @pytest.mark.skipif(no_fsl(), reason="fsl is not installed")
@@ -569,10 +597,3 @@ def test_first_genfname():
     value = first._gen_fname(name='original_segmentations')
     expected_value = os.path.abspath('segment_all_none_origsegs.nii.gz')
     assert value == expected_value
-
-
-@pytest.mark.skipif(no_fsl(), reason="fsl is not installed")
-def test_deprecation():
-    interface = fsl.ApplyXfm()
-    assert isinstance(interface, fsl.ApplyXFM)
-

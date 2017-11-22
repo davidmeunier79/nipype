@@ -38,7 +38,7 @@ else:
 
 def read_unknown_ntwk(ntwk):
     if not isinstance(ntwk, nx.classes.graph.Graph):
-        path, name, ext = split_filename(ntwk)
+        _, _, ext = split_filename(ntwk)
         if ext == '.pck':
             ntwk = nx.read_gpickle(ntwk)
         elif ext == '.graphml':
@@ -48,7 +48,7 @@ def read_unknown_ntwk(ntwk):
 
 def remove_all_edges(ntwk):
     ntwktmp = ntwk.copy()
-    edges = ntwktmp.edges_iter()
+    edges = list(ntwktmp.edges())
     for edge in edges:
         ntwk.remove_edge(edge[0], edge[1])
     return ntwk
@@ -60,20 +60,20 @@ def fix_keys_for_gexf(orig):
     """
     import networkx as nx
     ntwk = nx.Graph()
-    nodes = orig.nodes_iter()
-    edges = orig.edges_iter()
+    nodes = list(orig.nodes())
+    edges = list(orig.edges())
     for node in nodes:
         newnodedata = {}
-        newnodedata.update(orig.node[node])
-        if 'dn_fsname' in orig.node[node]:
-            newnodedata['label'] = orig.node[node]['dn_fsname']
-        ntwk.add_node(str(node), newnodedata)
-        if 'dn_position' in ntwk.node[str(node)] and 'dn_position' in newnodedata:
-            ntwk.node[str(node)]['dn_position'] = str(newnodedata['dn_position'])
+        newnodedata.update(orig.nodes[node])
+        if 'dn_fsname' in orig.nodes[node]:
+            newnodedata['label'] = orig.nodes[node]['dn_fsname']
+        ntwk.add_node(str(node), **newnodedata)
+        if 'dn_position' in ntwk.nodes[str(node)] and 'dn_position' in newnodedata:
+            ntwk.nodes[str(node)]['dn_position'] = str(newnodedata['dn_position'])
     for edge in edges:
         data = {}
         data = orig.edge[edge[0]][edge[1]]
-        ntwk.add_edge(str(edge[0]), str(edge[1]), data)
+        ntwk.add_edge(str(edge[0]), str(edge[1]), **data)
         if 'fiber_length_mean' in ntwk.edge[str(edge[0])][str(edge[1])]:
             ntwk.edge[str(edge[0])][str(edge[1])]['fiber_length_mean'] = str(data['fiber_length_mean'])
         if 'fiber_length_std' in ntwk.edge[str(edge[0])][str(edge[1])]:
@@ -104,28 +104,25 @@ def average_networks(in_files, ntwk_res_file, group_id):
     """
     import networkx as nx
     import os.path as op
-    iflogger.info(("Creating average network for group: "
-                   "{grp}").format(grp=group_id))
+    iflogger.info('Creating average network for group: %s', group_id)
     matlab_network_list = []
     if len(in_files) == 1:
         avg_ntwk = read_unknown_ntwk(in_files[0])
     else:
         count_to_keep_edge = np.round(len(in_files) / 2.0)
-        iflogger.info(("Number of networks: {L}, an edge must occur in at "
-                       "least {c} to remain in the "
-                       "average network").format(L=len(in_files),
-                                                 c=count_to_keep_edge))
+        iflogger.info('Number of networks: %i, an edge must occur in at '
+                      'least %i to remain in the average network',
+                      len(in_files), count_to_keep_edge)
         ntwk_res_file = read_unknown_ntwk(ntwk_res_file)
-        iflogger.info(("{n} Nodes found in network resolution "
-                       "file").format(n=ntwk_res_file.number_of_nodes()))
+        iflogger.info('%i nodes found in network resolution file',
+                      ntwk_res_file.number_of_nodes())
         ntwk = remove_all_edges(ntwk_res_file)
         counting_ntwk = ntwk.copy()
         # Sums all the relevant variables
         for index, subject in enumerate(in_files):
             tmp = nx.read_gpickle(subject)
-            iflogger.info(('File {s} has {n} '
-                           'edges').format(s=subject, n=tmp.number_of_edges()))
-            edges = tmp.edges_iter()
+            iflogger.info('File %s has %i edges', subject, tmp.number_of_edges())
+            edges = list(tmp.edges())
             for edge in edges:
                 data = {}
                 data = tmp.edge[edge[0]][edge[1]]
@@ -134,29 +131,28 @@ def average_networks(in_files, ntwk_res_file, group_id):
                     current = {}
                     current = ntwk.edge[edge[0]][edge[1]]
                     data = add_dicts_by_key(current, data)
-                ntwk.add_edge(edge[0], edge[1], data)
-            nodes = tmp.nodes_iter()
+                ntwk.add_edge(edge[0], edge[1], **data)
+            nodes = list(nodes())
             for node in nodes:
                 data = {}
-                data = ntwk.node[node]
-                if 'value' in tmp.node[node]:
-                    data['value'] = data['value'] + tmp.node[node]['value']
-                ntwk.add_node(node, data)
+                data = ntwk.nodes[node]
+                if 'value' in tmp.nodes[node]:
+                    data['value'] = data['value'] + tmp.nodes[node]['value']
+                ntwk.add_node(node, **data)
 
         # Divides each value by the number of files
-        nodes = ntwk.nodes_iter()
-        edges = ntwk.edges_iter()
-        iflogger.info(('Total network has {n} '
-                       'edges').format(n=ntwk.number_of_edges()))
+        nodes = list(ntwk.nodes())
+        edges = list(ntwk.edges())
+        iflogger.info('Total network has %i edges', ntwk.number_of_edges())
         avg_ntwk = nx.Graph()
         newdata = {}
         for node in nodes:
-            data = ntwk.node[node]
+            data = ntwk.nodes[node]
             newdata = data
             if 'value' in data:
                 newdata['value'] = data['value'] / len(in_files)
-                ntwk.node[node]['value'] = newdata
-            avg_ntwk.add_node(node, newdata)
+                ntwk.nodes[node]['value'] = newdata
+            avg_ntwk.add_node(node, **newdata)
 
         edge_dict = {}
         edge_dict['count'] = np.zeros((avg_ntwk.number_of_nodes(),
@@ -168,12 +164,13 @@ def average_networks(in_files, ntwk_res_file, group_id):
                     if not key == 'count':
                         data[key] = data[key] / len(in_files)
                 ntwk.edge[edge[0]][edge[1]] = data
-                avg_ntwk.add_edge(edge[0], edge[1], data)
+                avg_ntwk.add_edge(edge[0], edge[1], **data)
             edge_dict['count'][edge[0] - 1][edge[1] - 1] = ntwk.edge[edge[0]][edge[1]]['count']
 
-        iflogger.info('After thresholding, the average network has has {n} edges'.format(n=avg_ntwk.number_of_edges()))
+        iflogger.info('After thresholding, the average network has %i edges',
+                      avg_ntwk.number_of_edges())
 
-        avg_edges = avg_ntwk.edges_iter()
+        avg_edges = avg_ntwk.edges()
         for edge in avg_edges:
             data = avg_ntwk.edge[edge[0]][edge[1]]
             for key in list(data.keys()):
@@ -187,16 +184,17 @@ def average_networks(in_files, ntwk_res_file, group_id):
             matlab_network_list.append(op.abspath(network_name))
             tmp[key] = edge_dict[key]
             sio.savemat(op.abspath(network_name), tmp)
-            iflogger.info('Saving average network for key: {k} as {out}'.format(k=key, out=op.abspath(network_name)))
+            iflogger.info('Saving average network for key: %s as %s', key,
+                          op.abspath(network_name))
 
     # Writes the networks and returns the name
     network_name = group_id + '_average.pck'
     nx.write_gpickle(avg_ntwk, op.abspath(network_name))
-    iflogger.info('Saving average network as {out}'.format(out=op.abspath(network_name)))
+    iflogger.info('Saving average network as %s', op.abspath(network_name))
     avg_ntwk = fix_keys_for_gexf(avg_ntwk)
     network_name = group_id + '_average.gexf'
     nx.write_gexf(avg_ntwk, op.abspath(network_name))
-    iflogger.info('Saving average network as {out}'.format(out=op.abspath(network_name)))
+    iflogger.info('Saving average network as %s', op.abspath(network_name))
     return network_name, matlab_network_list
 
 
@@ -319,11 +317,11 @@ def compute_network_measures(ntwk):
 def add_node_data(node_array, ntwk):
     node_ntwk = nx.Graph()
     newdata = {}
-    for idx, data in ntwk.nodes_iter(data=True):
+    for idx, data in ntwk.nodes(data=True):
         if not int(idx) == 0:
             newdata['value'] = node_array[int(idx) - 1]
             data.update(newdata)
-            node_ntwk.add_node(int(idx), data)
+            node_ntwk.add_node(int(idx), **data)
     return node_ntwk
 
 
@@ -339,7 +337,7 @@ def add_edge_data(edge_array, ntwk, above=0, below=0):
                         old_edge_dict = edge_ntwk.edge[x + 1][y + 1]
                         edge_ntwk.remove_edge(x + 1, y + 1)
                         data.update(old_edge_dict)
-                    edge_ntwk.add_edge(x + 1, y + 1, data)
+                    edge_ntwk.add_edge(x + 1, y + 1, **data)
     return edge_ntwk
 
 
@@ -453,12 +451,12 @@ class NetworkXMetrics(BaseInterface):
 
         out_pickled_extra_measures = op.abspath(self._gen_outfilename(self.inputs.out_pickled_extra_measures, 'pck'))
         dict_measures = compute_dict_measures(ntwk)
-        iflogger.info('Saving extra measure file to {path} in Pickle format'.format(path=op.abspath(out_pickled_extra_measures)))
-        file = open(out_pickled_extra_measures, 'w')
-        pickle.dump(dict_measures, file)
-        file.close()
+        iflogger.info('Saving extra measure file to %s in Pickle format',
+                      op.abspath(out_pickled_extra_measures))
+        with open(out_pickled_extra_measures, 'w') as fo:
+            pickle.dump(dict_measures, fo)
 
-        iflogger.info('Saving MATLAB measures as {m}'.format(m=matlab))
+        iflogger.info('Saving MATLAB measures as %s', matlab)
 
         # Loops through the measures which return a dictionary,
         # converts the keys and values to a Numpy array,

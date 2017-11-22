@@ -1,0 +1,5 @@
+pip install future --upgrade
+
+pip install prov
+
+https://github.com/nipy/nipype/blob/master/CONTRIBUTING.md (pull request contribution)

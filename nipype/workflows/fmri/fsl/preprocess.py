@@ -4,7 +4,6 @@
 from __future__ import division
 
 import os
-
 from ....interfaces import fsl as fsl          # fsl
 from ....interfaces import utility as util     # utility
 from ....pipeline import engine as pe          # pypeline engine
@@ -18,6 +17,28 @@ def getthreshop(thresh):
     return ['-thr %.10f -Tmin -bin' % (0.1 * val[1]) for val in thresh]
 
 
+def pickrun(files, whichrun):
+    """pick file from list of files"""
+
+    filemap = {'first': 0, 'last': -1, 'middle': len(files) // 2}
+
+    if isinstance(files, list):
+
+        # whichrun is given as integer
+        if isinstance(whichrun, int):
+            return files[whichrun]
+        # whichrun is given as string
+        elif isinstance(whichrun, str):
+            if whichrun not in filemap.keys():
+                raise(KeyError, 'Sorry, whichrun must be either integer index'
+                                'or string in form of "first", "last" or "middle')
+            else:
+                return files[filemap[whichrun]]
+    else:
+        # in case single file name is given
+        return files
+
+
 def pickfirst(files):
     if isinstance(files, list):
         return files[0]
@@ -28,19 +49,21 @@ def pickfirst(files):
 def pickmiddle(files):
     from nibabel import load
     import numpy as np
+    from nipype.utils import NUMPY_MMAP
     middlevol = []
     for f in files:
-        middlevol.append(int(np.ceil(load(f).shape[3] / 2)))
+        middlevol.append(int(np.ceil(load(f, mmap=NUMPY_MMAP).shape[3] / 2)))
     return middlevol
 
 
 def pickvol(filenames, fileidx, which):
     from nibabel import load
     import numpy as np
+    from nipype.utils import NUMPY_MMAP
     if which.lower() == 'first':
         idx = 0
     elif which.lower() == 'middle':
-        idx = int(np.ceil(load(filenames[fileidx]).shape[3] / 2))
+        idx = int(np.ceil(load(filenames[fileidx], mmap=NUMPY_MMAP).shape[3] / 2))
     elif which.lower() == 'last':
         idx = load(filenames[fileidx]).shape[3] - 1
     else:
@@ -399,7 +422,7 @@ def create_parallelfeat_preproc(name='featpreproc', highpass=True):
     return featpreproc
 
 
-def create_featreg_preproc(name='featpreproc', highpass=True, whichvol='middle'):
+def create_featreg_preproc(name='featpreproc', highpass=True, whichvol='middle', whichrun=0):
     """Create a FEAT preprocessing workflow with registration to one volume of the first run
 
     Parameters
@@ -410,6 +433,7 @@ def create_featreg_preproc(name='featpreproc', highpass=True, whichvol='middle')
         name : name of workflow (default: featpreproc)
         highpass : boolean (default: True)
         whichvol : which volume of the first run to register to ('first', 'middle', 'last', 'mean')
+        whichrun : which run to draw reference volume from (integer index or 'first', 'middle', 'last')
 
     Inputs::
 
@@ -509,8 +533,8 @@ def create_featreg_preproc(name='featpreproc', highpass=True, whichvol='middle')
     if whichvol != 'mean':
         extract_ref = pe.Node(interface=fsl.ExtractROI(t_size=1),
                               iterfield=['in_file'],
-                              name='extractref')
-        featpreproc.connect(img2float, ('out_file', pickfirst), extract_ref, 'in_file')
+                              name = 'extractref')
+        featpreproc.connect(img2float, ('out_file', pickrun, whichrun), extract_ref, 'in_file')
         featpreproc.connect(img2float, ('out_file', pickvol, 0, whichvol), extract_ref, 't_min')
         featpreproc.connect(extract_ref, 'roi_file', outputnode, 'reference')
 
@@ -528,7 +552,7 @@ def create_featreg_preproc(name='featpreproc', highpass=True, whichvol='middle')
         featpreproc.connect(extract_ref, 'roi_file', motion_correct, 'ref_file')
     else:
         motion_correct.inputs.mean_vol = True
-        featpreproc.connect(motion_correct, ('mean_img', pickfirst), outputnode, 'reference')
+        featpreproc.connect(motion_correct, ('mean_img', pickrun, whichrun), outputnode, 'reference')
 
     featpreproc.connect(motion_correct, 'par_file', outputnode, 'motion_parameters')
     featpreproc.connect(motion_correct, 'out_file', outputnode, 'realigned_files')
@@ -548,10 +572,9 @@ def create_featreg_preproc(name='featpreproc', highpass=True, whichvol='middle')
     Extract the mean volume of the first functional run
     """
 
-    meanfunc = pe.Node(interface=fsl.ImageMaths(op_string='-Tmean',
-                                                suffix='_mean'),
+    meanfunc = pe.Node(interface=fsl.ImageMaths(op_string = '-Tmean', suffix='_mean'),
                        name='meanfunc')
-    featpreproc.connect(motion_correct, ('out_file', pickfirst), meanfunc, 'in_file')
+    featpreproc.connect(motion_correct, ('out_file', pickrun, whichrun), meanfunc, 'in_file')
 
     """
     Strip the skull from the mean functional to generate a mask
@@ -697,7 +720,7 @@ def create_featreg_preproc(name='featpreproc', highpass=True, whichvol='middle')
                         iterfield=['in_file'],
                         name='meanfunc3')
 
-    featpreproc.connect(meanscale, ('out_file', pickfirst), meanfunc3, 'in_file')
+    featpreproc.connect(meanscale, ('out_file', pickrun, whichrun), meanfunc3, 'in_file')
     featpreproc.connect(meanfunc3, 'out_file', outputnode, 'mean')
 
     """
@@ -747,7 +770,7 @@ def create_susan_smooth(name="susan_smooth", separate_masks=True):
     Inputs::
 
         inputnode.in_files : functional runs (filename or list of filenames)
-        inputnode.fwhm : fwhm for smoothing with SUSAN
+        inputnode.fwhm : fwhm for smoothing with SUSAN (float or list of floats)
         inputnode.mask_file : mask used for estimating SUSAN thresholds (but not for smoothing)
 
     Outputs::
@@ -764,6 +787,19 @@ def create_susan_smooth(name="susan_smooth", separate_masks=True):
     >>> smooth.run() # doctest: +SKIP
 
     """
+    # replaces the functionality of a "for loop"
+    def cartesian_product(fwhms, in_files, usans, btthresh):
+        from nipype.utils.filemanip import filename_to_list
+        # ensure all inputs are lists
+        in_files = filename_to_list(in_files)
+        fwhms = [fwhms] if isinstance(fwhms, (int, float)) else fwhms
+        # create cartesian product lists (s_<name> = single element of list)
+        cart_in_file = [s_in_file for s_in_file in in_files for s_fwhm in fwhms]
+        cart_fwhm = [s_fwhm for s_in_file in in_files for s_fwhm in fwhms]
+        cart_usans = [s_usans for s_usans in usans for s_fwhm in fwhms]
+        cart_btthresh = [s_btthresh for s_btthresh in btthresh for s_fwhm in fwhms]
+
+        return cart_in_file, cart_fwhm, cart_usans, cart_btthresh
 
     susan_smooth = pe.Workflow(name=name)
 
@@ -783,8 +819,15 @@ def create_susan_smooth(name="susan_smooth", separate_masks=True):
     functional
     """
 
+    multi_inputs = pe.Node(util.Function(function=cartesian_product,
+                                         output_names=['cart_in_file',
+                                                       'cart_fwhm',
+                                                       'cart_usans',
+                                                       'cart_btthresh']),
+                           name='multi_inputs')
+
     smooth = pe.MapNode(interface=fsl.SUSAN(),
-                        iterfield=['in_file', 'brightness_threshold', 'usans'],
+                        iterfield=['in_file', 'brightness_threshold', 'usans', 'fwhm'],
                         name='smooth')
 
     """
@@ -841,10 +884,17 @@ def create_susan_smooth(name="susan_smooth", separate_masks=True):
     """
     Define a function to get the brightness threshold for SUSAN
     """
-    susan_smooth.connect(inputnode, 'fwhm', smooth, 'fwhm')
-    susan_smooth.connect(inputnode, 'in_files', smooth, 'in_file')
-    susan_smooth.connect(median, ('out_stat', getbtthresh), smooth, 'brightness_threshold')
-    susan_smooth.connect(merge, ('out', getusans), smooth, 'usans')
+
+    susan_smooth.connect([
+        (inputnode, multi_inputs, [('in_files', 'in_files'),
+                                   ('fwhm', 'fwhms')]),
+        (median, multi_inputs, [(('out_stat', getbtthresh), 'btthresh')]),
+        (merge, multi_inputs, [(('out', getusans), 'usans')]),
+        (multi_inputs, smooth, [('cart_in_file', 'in_file'),
+                                ('cart_fwhm', 'fwhm'),
+                                ('cart_btthresh', 'brightness_threshold'),
+                                ('cart_usans', 'usans')]),
+    ])
 
     outputnode = pe.Node(interface=util.IdentityInterface(fields=['smoothed_files']),
                          name='outputnode')

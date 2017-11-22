@@ -11,7 +11,8 @@ from ....interfaces import fsl as fsl
 
 
 def tbss1_op_string(in_files):
-    import nibabel as nib
+    import nibabel as nb
+    from nipype.utils import NUMPY_MMAP
     op_strings = []
     print(in_files)
     
@@ -19,7 +20,7 @@ def tbss1_op_string(in_files):
         in_files = [in_files]
         
     for infile in in_files:
-        img = nib.load(infile)
+        img = nb.load(infile, mmap=NUMPY_MMAP)
         dimtup = tuple(d - 2 for d in img.shape)
         dimtup = dimtup[0:3]
         op_str = '-min 1 -ero -roi 1 %d 1 %d 1 %d 0 1' % dimtup

@@ -4,10 +4,14 @@
 """The ants module provides basic functions for interfacing with ANTS tools."""
 from __future__ import print_function, division, unicode_literals, absolute_import
 from builtins import str
+
+import os
+
 # Local imports
-from ... import logging
-from ..base import CommandLine, CommandLineInputSpec, traits, isdefined
-logger = logging.getLogger('interface')
+from ... import logging, LooseVersion
+from ..base import (CommandLine, CommandLineInputSpec, traits, isdefined,
+                    PackageInfo)
+iflogger = logging.getLogger('interface')
 
 # -Using -1 gives primary responsibilty to ITKv4 to do the correct
 #  thread limitings.
@@ -23,6 +27,29 @@ LOCAL_DEFAULT_NUMBER_OF_THREADS = 1
 #  num_threads, then respect that no matter what SGE tries to limit.
 PREFERED_ITKv4_THREAD_LIMIT_VARIABLE = 'NSLOTS'
 ALT_ITKv4_THREAD_LIMIT_VARIABLE = 'ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS'
+
+
+class Info(PackageInfo):
+    version_cmd = os.path.join(os.getenv('ANTSPATH', ''),
+                               'antsRegistration') + ' --version'
+
+    @staticmethod
+    def parse_version(raw_info):
+        for line in raw_info.splitlines():
+            if line.startswith('ANTs Version: '):
+                v_string = line.split()[2]
+                break
+        else:
+            return None
+
+        # -githash may or may not be appended
+        v_string = v_string.split('-')[0]
+
+        # 2.2.0-equivalent version string
+        if 'post' in v_string and LooseVersion(v_string) >= LooseVersion('2.1.0.post789'):
+            return '2.2.0'
+        else:
+            return '.'.join(v_string.split('.')[:3])
 
 
 class ANTSCommandInputSpec(CommandLineInputSpec):
@@ -84,3 +111,7 @@ class ANTSCommand(CommandLine):
         <instance>.inputs.num_threads
         """
         cls._num_threads = num_threads
+
+    @property
+    def version(self):
+        return Info.version()
