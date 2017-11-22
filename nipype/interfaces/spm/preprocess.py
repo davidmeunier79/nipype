@@ -369,7 +369,11 @@ class Coregister(SPMCommand):
         if self.inputs.jobtype == "estimate":
             if isdefined(self.inputs.apply_to_files):
                 outputs['coregistered_files'] = self.inputs.apply_to_files
+                
             outputs['coregistered_source'] = self.inputs.source
+            #print ("New version of coregistered_source ... testing !")
+            #outputs['coregistered_source'] = self.inputs.source[0]
+            
         elif (self.inputs.jobtype == "write" or
                 self.inputs.jobtype == "estwrite"):
             if isdefined(self.inputs.apply_to_files):
