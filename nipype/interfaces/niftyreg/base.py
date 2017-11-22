@@ -47,9 +47,10 @@ def no_nifty_package(cmd='reg_f3d'):
 class NiftyRegCommandInputSpec(CommandLineInputSpec):
     """Input Spec for niftyreg interfaces."""
     # Set the number of omp thread to use
-    omp_core_val = traits.Int(int(os.environ.get('OMP_NUM_THREADS', '1')),
-                              desc='Number of openmp thread to use',
-                              argstr='-omp %i', usedefault=True)
+    
+    #omp_core_val = traits.Int(int(os.environ.get('OMP_NUM_THREADS', '1')),
+                              #desc='Number of openmp thread to use',
+                              #argstr='-omp %i', usedefault=True)
 
 
 class NiftyRegCommand(CommandLine):
@@ -65,41 +66,44 @@ class NiftyRegCommand(CommandLine):
         self.num_threads = 1
         super(NiftyRegCommand, self).__init__(**inputs)
         self.required_version = required_version
-        _version = self.get_version()
-        if _version:
-            _version = _version.decode("utf-8")
-            if self._min_version is not None and \
-               StrictVersion(_version) < StrictVersion(self._min_version):
-                msg = 'A later version of Niftyreg is required (%s < %s)'
-                warn(msg % (_version, self._min_version))
-            if required_version is not None:
-                if StrictVersion(_version) != StrictVersion(required_version):
-                    msg = 'The version of NiftyReg differs from the required'
-                    msg += '(%s != %s)'
-                    warn(msg % (_version, self.required_version))
-        self.inputs.on_trait_change(self._omp_update, 'omp_core_val')
-        self.inputs.on_trait_change(self._environ_update, 'environ')
-        self._omp_update()
+        #_version = self.get_version()
+        #if _version:
+            #_version = _version.decode("utf-8")
+            #if self._min_version is not None and \
+               #StrictVersion(_version) < StrictVersion(self._min_version):
+                #msg = 'A later version of Niftyreg is required (%s < %s)'
+                #warn(msg % (_version, self._min_version))
+            #if required_version is not None:
+                #if StrictVersion(_version) != StrictVersion(required_version):
+                    #msg = 'The version of NiftyReg differs from the required'
+                    #msg += '(%s != %s)'
+                    #warn(msg % (_version, self.required_version))
+        #self.inputs.on_trait_change(self._omp_update, 'omp_core_val')
+        #self.inputs.on_trait_change(self._environ_update, 'environ')
+        #self._omp_update()
 
-    def _omp_update(self):
-        if self.inputs.omp_core_val:
-            self.inputs.environ['OMP_NUM_THREADS'] = \
-                str(self.inputs.omp_core_val)
-            self.num_threads = self.inputs.omp_core_val
-        else:
-            if 'OMP_NUM_THREADS' in self.inputs.environ:
-                del self.inputs.environ['OMP_NUM_THREADS']
-            self.num_threads = 1
+    #def _omp_update(self):
+        #if self.inputs.omp_core_val:
+            #self.inputs.environ['OMP_NUM_THREADS'] = \
+                #str(self.inputs.omp_core_val)
+            #self.num_threads = self.inputs.omp_core_val
+        #else:
+            #if 'OMP_NUM_THREADS' in self.inputs.environ:
+                #del self.inputs.environ['OMP_NUM_THREADS']
+            #self.num_threads = 1
 
     def _environ_update(self):
-        if self.inputs.environ:
-            if 'OMP_NUM_THREADS' in self.inputs.environ:
-                self.inputs.omp_core_val = \
-                    int(self.inputs.environ['OMP_NUM_THREADS'])
-            else:
-                self.inputs.omp_core_val = Undefined
-        else:
-            self.inputs.omp_core_val = Undefined
+        pass
+    
+        #if self.inputs.environ:
+            
+            #if 'OMP_NUM_THREADS' in self.inputs.environ:
+                #self.inputs.omp_core_val = \
+                    #int(self.inputs.environ['OMP_NUM_THREADS'])
+            #else:
+                #self.inputs.omp_core_val = Undefined
+        #else:
+            #self.inputs.omp_core_val = Undefined
 
     def check_version(self):
         _version = self.get_version()
@@ -130,8 +134,9 @@ class NiftyRegCommand(CommandLine):
         return self.get_version() is not None
 
     def _format_arg(self, name, spec, value):
-        if name == 'omp_core_val':
-            self.numthreads = value
+        #if name == 'omp_core_val':
+            #if value:
+                #self.numthreads = value
         return super(NiftyRegCommand, self)._format_arg(name, spec, value)
 
     def _gen_fname(self, basename, out_dir=None, suffix=None, ext=None):
