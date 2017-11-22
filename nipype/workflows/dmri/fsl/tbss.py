@@ -554,7 +554,7 @@ def create_tbss_non_FA(name='tbss_non_FA'):
                                        suffix="_masked"),
                         name="maskgroup")
     #projectfa = pe.Node(fsl.TractSkeleton(project_data=True,
-    projectfa = pe.Node(fsl.TractSkeleton(
+    projectfa = pe.Node(fsl.TractSkeleton(project_data=True,
                                           # projected_data = 'test.nii.gz',
                                           use_cingulum_mask=True
                                           ),
@@ -579,12 +579,13 @@ def create_tbss_non_FA(name='tbss_non_FA'):
                                 ]),
     ])
 
-    # Define the outputnode
-    outputnode = pe.Node(interface=util.IdentityInterface(
-        fields=['projected_nonFA_file']),
-        name='outputnode')
-    tbss_non_FA.connect([
-        (projectfa, outputnode, [('projected_data', 'projected_nonFA_file'),
-                                 ]),
-    ])
+    ## Define the outputnode
+    #outputnode = pe.Node(interface=util.IdentityInterface(
+        #fields=['projected_nonFA_file']),
+        #name='outputnode')
+    #tbss_non_FA.connect([
+        #(projectfa, outputnode, [('projected_data', 'projected_nonFA_file'),
+                                 #]),
+    ##])
+    
     return tbss_non_FA
