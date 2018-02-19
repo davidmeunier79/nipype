@@ -15,17 +15,17 @@ def modify_prethresh_fsf(fsf_file,prethresh_mask_file):
     
     new_lines = []
     
-    print fsf_file
+    print(fsf_file)
     
     with open(fsf_file) as f:
     
         lines = f.readlines()
         
-        print lines
+        print(lines)
         
         for line in lines:
         
-            print line
+            print(line)
             
             splitted_line = line.split(" ")
             
@@ -33,7 +33,7 @@ def modify_prethresh_fsf(fsf_file,prethresh_mask_file):
                 
                 if splitted_line[0] == "set" and splitted_line[1] == "fmri(threshmask)" :
                     
-                    print "Found set(threshmask)"
+                    print("Found set(threshmask)")
                     
                     line = splitted_line[0] + " " + splitted_line[1] + " " + "\"" + prethresh_mask_file  +"\"\n"
                     
@@ -50,7 +50,7 @@ def modify_prethresh_fsf(fsf_file,prethresh_mask_file):
                     
             new_lines.append(line)
                     
-        print new_lines
+        print(new_lines)
                 
     modified_fsf_file = os.path.abspath("modified_design.fsf")
     

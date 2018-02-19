@@ -176,13 +176,13 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(TR, wf_name='preprocess_stru
         
         if slice_code == 5:  #for Siemens-even interleaved ascending
                 
-            sliceTiming.inputs.slice_order = range(2,num_slices+1,2) + range(1,num_slices+1,2)      #for Siemens-even interleaved ascending 
+            sliceTiming.inputs.slice_order = list(range(2,num_slices+1,2)) + list(range(1,num_slices+1,2))      #for Siemens-even interleaved ascending 
             #sliceTiming.inputs.ref_slice = num_slices-1
             sliceTiming.inputs.ref_slice = num_slices ### a verifier...
                 
         elif slice_code == 2:  #for Siemens sequential_decreasing
                 
-            sliceTiming.inputs.slice_order = range(num_slices,0,-1)
+            sliceTiming.inputs.slice_order = list(range(num_slices,0,-1))
             sliceTiming.inputs.ref_slice = int(num_slices/2.0)
               
         #sliceTiming.inputs.slice_order = range(1,42,2) + range(2,42,2)      #for Siemens-odd interleaved ascending
@@ -278,7 +278,7 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
         
     if trimming:
             
-        print "Running trimming with {} volums removed".format(nb_scans_to_remove)
+        print("Running trimming with {} volums removed".format(nb_scans_to_remove))
         #### trim
         if mult == True:
             trim = pe.MapNode(interface=Trim(), iterfield = ['in_file'],name ="trim")
@@ -299,13 +299,13 @@ def create_preprocess_funct_to_struct_4D_spm12(wf_name='preprocess_funct_to_stru
         if slice_code == 5:  #for Siemens-even interleaved ascending
                 
     
-            sliceTiming.inputs.slice_order = range(2,num_slices+1,2) + range(1,num_slices+1,2)      #for Siemens-even interleaved ascending 
+            sliceTiming.inputs.slice_order = list(range(2,num_slices+1,2)) + list(range(1,num_slices+1,2))      #for Siemens-even interleaved ascending 
             #sliceTiming.inputs.ref_slice = num_slices-1
             sliceTiming.inputs.ref_slice = num_slices ### a verifier...
                 
         elif slice_code == 2:  #for Siemens sequential_decreasing
                 
-            sliceTiming.inputs.slice_order = range(num_slices,0,-1)
+            sliceTiming.inputs.slice_order = list(range(num_slices,0,-1))
             sliceTiming.inputs.ref_slice = int(num_slices/2.0)
             
         elif slice_code == -1: 
@@ -417,7 +417,7 @@ def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_
         
     if trimming:
             
-        print "Running trimming with {} volums removed".format(nb_scans_to_remove)
+        print("Running trimming with {} volums removed".format(nb_scans_to_remove))
         #### trim
         if mult == True:
             trim = pe.MapNode(interface=Trim(), iterfield = ['in_file'],name ="trim")
@@ -438,20 +438,20 @@ def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_
         if slice_code == 5:  #for Siemens-even interleaved ascending
                 
     
-            sliceTiming.inputs.slice_order = range(2,num_slices+1,2) + range(1,num_slices+1,2)      #for Siemens-even interleaved ascending 
+            sliceTiming.inputs.slice_order = list(range(2,num_slices+1,2)) + list(range(1,num_slices+1,2))      #for Siemens-even interleaved ascending 
             #sliceTiming.inputs.ref_slice = num_slices-1
             sliceTiming.inputs.ref_slice = num_slices ### a verifier...
                 
         elif slice_code == 2:  #for Siemens sequential_decreasing
                 
-            sliceTiming.inputs.slice_order = range(num_slices,0,-1)
+            sliceTiming.inputs.slice_order = list(range(num_slices,0,-1))
             sliceTiming.inputs.ref_slice = int(num_slices/2.0)
             
         elif slice_code == -1: 
             ### Attention, timing de chaque slice et non ordre d'acquisition des slices
             ### utilise pour faire du slice_timing avec une aquisition multiband
             
-            print "Running multiband slice timing...experimental"
+            print("Running multiband slice timing...experimental")
             
             if len(slice_timings) != 0:
                 sliceTiming.inputs.slice_order = slice_timings
@@ -622,7 +622,7 @@ def create_preprocess_funct_to_struct_4D_spm12_art(wf_name='preprocess_funct_to_
     return preprocess
     
 
-def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_funct_to_struct_4D_spm12_art', mult = True,  slice_timing = False, fast_segmenting = True, smoothing = False, output_normalized_segmented_maps = False, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8],slice_timings = [],ref_timings = -1.0, skullstripping = False,nb_scans_to_remove = 2, trimming = True,normalize12 = True,zintensity_threshold = 2.5,norm_threshold = 0.5):
+def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_funct_to_struct_4D_spm12_art', mult = True,  slice_timing = False, fast_segmenting = True, smoothing = False, output_normalized_segmented_maps = True, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8],slice_timings = [],ref_timings = -1.0, skullstripping = False,nb_scans_to_remove = 2, trimming = True,normalize12 = True,segment = True, zintensity_threshold = 2.5,norm_threshold = 0.5):
     """ 
     Preprocessing old fashioned normalize funct -> struct with SPM12
     """
@@ -655,20 +655,20 @@ def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_fun
         if slice_code == 5:  #for Siemens-even interleaved ascending
                 
     
-            sliceTiming.inputs.slice_order = range(2,num_slices+1,2) + range(1,num_slices+1,2)      #for Siemens-even interleaved ascending 
+            sliceTiming.inputs.slice_order = list(range(2,num_slices+1,2)) + list(range(1,num_slices+1,2))      #for Siemens-even interleaved ascending 
             #sliceTiming.inputs.ref_slice = num_slices-1
             sliceTiming.inputs.ref_slice = num_slices ### a verifier...
                 
         elif slice_code == 2:  #for Siemens sequential_decreasing
                 
-            sliceTiming.inputs.slice_order = range(num_slices,0,-1)
+            sliceTiming.inputs.slice_order = list(range(num_slices,0,-1))
             sliceTiming.inputs.ref_slice = int(num_slices/2.0)
             
         elif slice_code == -1: 
             ### Attention, timing de chaque slice et non ordre d'acquisition des slices
             ### utilise pour faire du slice_timing avec une aquisition multiband
             
-            print "Running multiband slice timing...experimental"
+            print("Running multiband slice timing...experimental")
             
             if len(slice_timings) != 0:
                 
@@ -700,8 +700,6 @@ def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_fun
         else: 
             preprocess.connect(inputnode,'functionals',  coregister,'apply_to_files')
 
-
-        
     preprocess.connect(inputnode, 'struct', coregister,'target')
     preprocess.connect(inputnode,'mean_functional',coregister,'source')
     
@@ -747,6 +745,23 @@ def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_fun
 
         preprocess.connect(coregister,'coregistered_files',normalize_func,'apply_to_files')    
         preprocess.connect(segment,'transformation_mat', normalize_func, 'parameter_file')
+
+    if segment:
+    
+        ############ Old fashionned segment with SPM12
+
+        segment= pe.Node(interface=spm.Segment(), name="segment")
+
+        if fast_segmenting:
+            segment.inputs.gaussians_per_class = [1, 1, 1, 4] #(faster execution)
+
+        if output_normalized_segmented_maps:
+            segment.inputs.csf_output_type = [False,True, False]
+            segment.inputs.gm_output_type = [False,True, False]
+            segment.inputs.wm_output_type = [False,True, False]
+            
+        preprocess.connect(inputnode, 'struct', segment,'data')
+
 
     ################### art ########################
         
@@ -840,7 +855,7 @@ def create_preprocess_funct_4D_spm12_art(norm_template_file, wf_name='create_pre
         
     if trimming:
             
-        print "Running trimming with {} volums removed".format(nb_scans_to_remove)
+        print("Running trimming with {} volums removed".format(nb_scans_to_remove))
         #### trim
         if mult == True:
             trim = pe.MapNode(interface=Trim(), iterfield = ['in_file'],name ="trim")
@@ -861,20 +876,20 @@ def create_preprocess_funct_4D_spm12_art(norm_template_file, wf_name='create_pre
         if slice_code == 5:  #for Siemens-even interleaved ascending
                 
     
-            sliceTiming.inputs.slice_order = range(2,num_slices+1,2) + range(1,num_slices+1,2)      #for Siemens-even interleaved ascending 
+            sliceTiming.inputs.slice_order = list(range(2,num_slices+1,2)) + list(range(1,num_slices+1,2))      #for Siemens-even interleaved ascending 
             #sliceTiming.inputs.ref_slice = num_slices-1
             sliceTiming.inputs.ref_slice = num_slices ### a verifier...
                 
         elif slice_code == 2:  #for Siemens sequential_decreasing
                 
-            sliceTiming.inputs.slice_order = range(num_slices,0,-1)
+            sliceTiming.inputs.slice_order = list(range(num_slices,0,-1))
             sliceTiming.inputs.ref_slice = int(num_slices/2.0)
             
         elif slice_code == -1: 
             ### Attention, timing de chaque slice et non ordre d'acquisition des slices
             ### utilise pour faire du slice_timing avec une aquisition multiband
             
-            print "Running multiband slice timing...experimental"
+            print("Running multiband slice timing...experimental")
             
             if len(slice_timings) != 0:
                 sliceTiming.inputs.slice_order = slice_timings
@@ -968,7 +983,7 @@ def create_preprocess_funct_4D_spm8(norm_template_file,wf_name='preprocess_funct
     
     if slice_code == 5:  #for Siemens-even interleaved ascending
             
-        sliceTiming.inputs.slice_order = range(2,num_slices+1,2) + range(1,num_slices+1,2)      #for Siemens-even interleaved ascending
+        sliceTiming.inputs.slice_order = list(range(2,num_slices+1,2)) + list(range(1,num_slices+1,2))      #for Siemens-even interleaved ascending
         sliceTiming.inputs.ref_slice = num_slices-1
         
     #sliceTiming.inputs.slice_order = range(1,42,2) + range(2,42,2)      #for Siemens-odd interleaved ascending
