@@ -748,8 +748,6 @@ def create_preprocess_funct_to_struct_4D_spm12_norealign(wf_name='preprocess_fun
 
     if segment:
     
-        ############ Old fashionned segment with SPM12
-
         segment= pe.Node(interface=spm.Segment(), name="segment")
 
         if fast_segmenting:
@@ -964,7 +962,162 @@ def create_preprocess_funct_4D_spm12_art(norm_template_file, wf_name='create_pre
     
     return preprocess
     
+                 
+def create_preprocess_funct_to_struct_4D_spm12_caen(wf_name='preprocess_funct_to_struct_4D_spm12_caen', mult = True,  nb_scans_to_remove = 2, fast_segmenting = True, output_normalized_segmented_maps = True, smoothing = True, fwhm = [7.5,7.5,8],zintensity_threshold = 2.5,norm_threshold = 0.5,normalize12 = False):
+#                                                    slice_timing = False, fast_segmenting = True, smoothing = False, output_normalized_segmented_maps = False, TR = 2.2, num_slices = 40, slice_code = 4,fwhm = [7.5,7.5,8],slice_timings = [],ref_timings = -1.0, skullstripping = False,nb_scans_to_remove = 2, trimming = True,normalize12 = True,zintensity_threshold = 2.5,norm_threshold = 0.5):
+    """ 
+    Preprocessing Described by Villain 2010 J Neuroimaging, and used routinely in Caen ciceron
+    The main "new steps" are coregistration steps  mean EPI coregistered on T2star,  T2star->T2 and T2->T1 and finally normalisation of mean EPI -> T2star applied to the EPI files (normalize_epi), and then apply the T1 -> Normalisation on normalized EPI files
+    """
+    preprocess = pe.Workflow(name=wf_name)
 
+    ############################ input node #############################
+    inputnode = pe.Node(niu.IdentityInterface(fields=['functionals','struct','T2star','T2','brain_mask']),name='inputnode')
+
+
+    ############################ trimming ###############################
+
+
+    #if mult == True:    
+        #trim = pe.MapNode(interface=Trim(), iterfield = ['in_file'],name ="trim")
+        
+    #else:
+        #trim = pe.Node(interface=Trim(), name="trim")
+        
+    #trim.inputs.begin_index = nb_scans_to_remove
+    
+    #preprocess.connect(inputnode,'functionals',trim,'in_file')
+
+  
+    ############################ realign ################################
+    
+    
+    ##### realign
+    #realign = pe.MapNode(interface=spm.Realign(), name="realign", iterfield = ['in_files'])
+    realign = pe.Node(interface=spm.Realign(), name="realign")
+    
+    #realign.inputs.register_to_mean = True
+    #realign.inputs.jobtype = 'estwrite'
+    
+    #preprocess.connect(inputnode,'functionals',realign,'in_files')
+    
+    preprocess.connect(inputnode,'functionals',realign,'in_files')
+    
+    return preprocess
+
+
+
+
+    ############### coregister T2star to meanfunct  #######################################
+    coregister1 = pe.Node(interface=spm.Coregister(), name="coregister1")
+    coregister1.inputs.jobtype = 'estimate'
+    
+    #coregister1.inputs.cost_function = 'nmi'
+    #coregister1.inputs.separation = [4, 2]
+    #coregister1.inputs.tolerance = [0.02, 0.02, 0.02, 0.001, 0.001, 0.001, 0.01, 0.01, 0.01, 0.001, 0.001, 0.001]
+    #coregister1.inputs.fwhm = [7, 7]
+    
+    preprocess.connect(realign,'mean_image',coregister1,'target')
+    preprocess.connect(inputnode, ('T2star',get_first_img), coregister1,'source')
+    
+    
+    ############### coregister T2 to T2star  #######################################
+    coregister2 = pe.Node(interface=spm.Coregister(), name="coregister2")
+    coregister2.inputs.jobtype = 'estimate'
+
+    preprocess.connect(coregister1, 'coregistered_source',coregister2,'target')
+    
+    #preprocess.connect(inputnode, ('T2star',get_first_img),coregister2,'target')
+    preprocess.connect(inputnode, 'T2',coregister2,'source')
+    
+    
+    ############### coregister T1 to T2  #######################################
+    coregister3 = pe.Node(interface=spm.Coregister(), name="coregister3")
+    coregister3.inputs.jobtype = 'estimate'
+
+    preprocess.connect(coregister2, 'coregistered_source',coregister3,'target')
+    preprocess.connect(inputnode, 'struct', coregister3,'source')
+    
+
+    normalize_epi = pe.Node(interface=spm.Normalize(), name = "normalize_epi")
+    normalize_epi.inputs.jobtype = 'estwrite'
+
+    preprocess.connect(realign,'mean_image', normalize_epi,'source')
+    preprocess.connect(coregister1, 'coregistered_source', normalize_epi,'template')
+    preprocess.connect(realign,'realigned_files',normalize_epi,'apply_to_files')    
+    
+
+    if normalize12:
+        ########## 
+            
+        #### normalize_anat
+        normalize_func = pe.Node(interface=spm.Normalize12(), name = "normalize_func")
+        normalize_func.inputs.jobtype = 'estwrite'
+        #normalize_anat.inputs.template = norm_template_file
+        
+        ### connecting nodes
+        preprocess.connect(coregister3,'coregistered_source',normalize_func,'image_to_align')
+        
+        preprocess.connect(normalize_epi,'normalized_files',normalize_func,'apply_to_files')
+        #preprocess.connect(realign,'realigned_files',normalize_func,'apply_to_files')
+        
+    #else:
+        
+        ############# Old fashionned segment with SPM12
+        #segment= pe.Node(interface=spm.Segment(), name="segment")
+
+        #if fast_segmenting:
+            #segment.inputs.gaussians_per_class = [1, 1, 1, 4] #(faster execution)
+
+        #if output_normalized_segmented_maps:
+            #segment.inputs.csf_output_type = [False,True, False]
+            #segment.inputs.gm_output_type = [False,True, False]
+            #segment.inputs.wm_output_type = [False,True, False]
+            
+        #preprocess.connect(coregister3, 'coregistered_source', segment,'data')
+
+        #normalize_func = pe.Node(interface=spm.Normalize(), name = "normalize_func")
+        #normalize_func.inputs.jobtype = 'write'
+
+        #preprocess.connect(realign,'realigned_files',normalize_func,'apply_to_files')    
+        #preprocess.connect(segment,'transformation_mat', normalize_func, 'parameter_file')
+        
+        
+    if smoothing:
+        
+        ### smoothing
+        smooth = pe.Node(interface=spm.Smooth(), name="smooth")
+        smooth.inputs.fwhm = fwhm
+        
+        ### connect nodes
+        #preprocess.connect(normalize_func, 'normalized_files',smooth,'in_files')
+        preprocess.connect(normalize_func, ('normalized_files',make_list),smooth,'in_files')
+        
+
+    #return preprocess
+        
+    #################### art ########################
+        
+    art = pe.Node(interface=ra.ArtifactDetect(), name="art")
+    art.inputs.use_differences      = [True, False]
+
+    ### norm move
+    art.inputs.use_norm             = True
+    art.inputs.norm_threshold       = norm_threshold# 1    
+
+    ### transaltion only
+    #art.inputs.use_norm             = False
+    #art.inputs.translation_threshold       = 3
+
+    art.inputs.zintensity_threshold = zintensity_threshold# 3    
+    art.inputs.parameter_source     = 'SPM'
+    art.inputs.mask_type            = 'spm_global'
+    
+    preprocess.connect(realign,'realignment_parameters',art,'realignment_parameters')
+    preprocess.connect(realign,'realigned_files',art,'realigned_files')
+        
+    return preprocess
+        
 def create_preprocess_funct_4D_spm8(norm_template_file,wf_name='preprocess_funct_4D_spm8', TR = 2.0, num_slices = 40, slice_code = 5,fwhm = [7.5,7.5,8]):
     
     """
