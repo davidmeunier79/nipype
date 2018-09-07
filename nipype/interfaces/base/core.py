@@ -49,7 +49,7 @@ from .support import (Bunch, Stream, InterfaceResult, NipypeInterfaceError)
 from future import standard_library
 standard_library.install_aliases()
 
-iflogger = logging.getLogger('interface')
+iflogger = logging.getLogger('nipype.interface')
 
 PY35 = sys.version_info >= (3, 5)
 PY3 = sys.version_info[0] > 2
@@ -517,7 +517,9 @@ class BaseInterface(Interface):
         outputs = None
 
         try:
+            runtime = self._pre_run_hook(runtime)
             runtime = self._run_interface(runtime)
+            runtime = self._post_run_hook(runtime)
             outputs = self.aggregate_outputs(runtime)
         except Exception as e:
             import traceback
@@ -653,6 +655,28 @@ class BaseInterface(Interface):
         with open(json_file, 'w' if PY3 else 'wb') as fhandle:
             json.dump(inputs, fhandle, indent=4, ensure_ascii=False)
 
+    def _pre_run_hook(self, runtime):
+        """
+        Perform any pre-_run_interface() processing
+
+        Subclasses may override this function to modify ``runtime`` object or
+        interface state
+
+        MUST return runtime object
+        """
+        return runtime
+
+    def _post_run_hook(self, runtime):
+        """
+        Perform any post-_run_interface() processing
+
+        Subclasses may override this function to modify ``runtime`` object or
+        interface state
+
+        MUST return runtime object
+        """
+        return runtime
+
 
 class SimpleInterface(BaseInterface):
     """ An interface pattern that allows outputs to be set in a dictionary
@@ -668,13 +692,8 @@ class SimpleInterface(BaseInterface):
     Examples
     --------
 
-    .. testsetup::
-
-    >>> from .specs import TraitedSpec
-    >>> tmp = getfixture('tmpdir')
-    >>> old = tmp.chdir() # changing to a temporary directory
-
-    .. doctest::
+    >>> from nipype.interfaces.base import (
+    ...     SimpleInterface, BaseInterfaceInputSpec, TraitedSpec)
 
     >>> def double(x):
     ...    return 2 * x
@@ -697,11 +716,6 @@ class SimpleInterface(BaseInterface):
     >>> dbl.inputs.x = 2
     >>> dbl.run().outputs.doubled
     4.0
-
-    .. testsetup::
-
-    >>> os.chdir(old.strpath)
-
     """
 
     def __init__(self, from_file=None, resource_monitor=None, **inputs):
@@ -751,7 +765,7 @@ def run_command(runtime, output=None, timeout=0.01):
         shell=True,
         cwd=runtime.cwd,
         env=env,
-        close_fds=True,
+        close_fds=(not sys.platform.startswith('win')),
     )
 
     result = {
@@ -868,8 +882,7 @@ class CommandLine(BaseInterface):
     # Use get_traitsfree() to check all inputs set
     >>> pprint.pprint(cli.inputs.get_traitsfree())  # doctest:
     {'args': '-al',
-     'environ': {'DISPLAY': ':1'},
-     'ignore_exception': False}
+     'environ': {'DISPLAY': ':1'}}
 
     >>> cli.inputs.get_hashval()[0][0]
     ('args', '-al')
