@@ -709,10 +709,10 @@ class StimulusCorrelation(BaseInterface):
         g_in = np.loadtxt(intensityfile)
         g_in.shape = g_in.shape[0], 1
         dcol = designmatrix.shape[1]
-				
-		#### Ajout pour Jelle, quand le motion paramters ne contient qu'une colonne
-		if len(mc_in.shape == 1):
-			mc_in = mc_in.reshape(-1,1)
+        #### Ajout pour Jelle,
+        ##quand le motion paramters ne contient qu'une colonne
+        if len(mc_in.shape == 1):
+            mc_in = mc_in.reshape(-1,1)
 
         mccol = mc_in.shape[1]
         concat_matrix = np.hstack((np.hstack((designmatrix, mc_in)), g_in))
