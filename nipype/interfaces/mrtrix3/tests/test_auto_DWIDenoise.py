@@ -32,6 +32,7 @@ def test_DWIDenoise_inputs():
         ),
         out_file=dict(
             argstr='%s',
+            genfile=True,
             keep_extension=True,
             name_source='in_file',
             name_template='%s_denoised',
@@ -44,7 +45,10 @@ def test_DWIDenoise_inputs():
         for metakey, value in list(metadata.items()):
             assert getattr(inputs.traits()[key], metakey) == value
 def test_DWIDenoise_outputs():
-    output_map = dict(out_file=dict(), )
+    output_map = dict(
+        noise=dict(),
+        out_file=dict(),
+    )
     outputs = DWIDenoise.output_spec()
 
     for key, metadata in list(output_map.items()):

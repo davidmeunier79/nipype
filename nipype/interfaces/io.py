@@ -29,44 +29,15 @@ import tempfile
 from os.path import join, dirname
 from warnings import warn
 
-import sqlite3
-
 from .. import config, logging
 from ..utils.filemanip import (
     copyfile, simplify_list, ensure_list,
-    get_related_files, related_filetype_sets)
+    get_related_files)
 from ..utils.misc import human_order_sorted, str2bool
 from .base import (
     TraitedSpec, traits, Str, File, Directory, BaseInterface, InputMultiPath,
-    isdefined, OutputMultiPath, DynamicTraitedSpec, Undefined, BaseInterfaceInputSpec)
-
-have_pybids = True
-try:
-    import bids
-except ImportError:
-    have_pybids = False
-
-if have_pybids:
-    try:
-        from bids import layout as bidslayout
-    except ImportError:
-        from bids import grabbids as bidslayout
-
-try:
-    import pyxnat
-except:
-    pass
-
-try:
-    import paramiko
-except:
-    pass
-
-try:
-    import boto
-    from boto.s3.connection import S3Connection, OrdinaryCallingFormat
-except:
-    pass
+    isdefined, OutputMultiPath, DynamicTraitedSpec, Undefined, BaseInterfaceInputSpec,
+    LibraryBaseInterface)
 
 iflogger = logging.getLogger('nipype.interface')
 
@@ -536,8 +507,6 @@ class DataSink(IOBase):
         '''
 
         # Import packages
-        import logging
-
         try:
             import boto3
             import botocore
@@ -607,7 +576,6 @@ class DataSink(IOBase):
 
         # Import packages
         import hashlib
-        import logging
         import os
 
         from botocore.exceptions import ClientError
@@ -849,7 +817,7 @@ class S3DataGrabberInputSpec(DynamicTraitedSpec, BaseInterfaceInputSpec):
         desc='Information to plug into template')
 
 
-class S3DataGrabber(IOBase):
+class S3DataGrabber(LibraryBaseInterface, IOBase):
     """ Generic datagrabber module that wraps around glob in an
         intelligent way for neuroimaging tasks to grab files from
         Amazon S3
@@ -861,10 +829,28 @@ class S3DataGrabber(IOBase):
         "template" uses regex style formatting, rather than the
         glob-style found in the original DataGrabber.
 
+        Examples
+        --------
+
+        >>> s3grab = S3DataGrabber(infields=['subj_id'], outfields=["func", "anat"])
+        >>> s3grab.inputs.bucket = 'openneuro'
+        >>> s3grab.inputs.sort_filelist = True
+        >>> s3grab.inputs.template = '*'
+        >>> s3grab.inputs.anon = True
+        >>> s3grab.inputs.bucket_path = 'ds000101/ds000101_R2.0.0/uncompressed/'
+        >>> s3grab.inputs.local_directory = '/tmp'
+        >>> s3grab.inputs.field_template = {'anat': '%s/anat/%s_T1w.nii.gz',
+        ...                                 'func': '%s/func/%s_task-simon_run-1_bold.nii.gz'}
+        >>> s3grab.inputs.template_args = {'anat': [['subj_id', 'subj_id']],
+        ...                                'func': [['subj_id', 'subj_id']]}
+        >>> s3grab.inputs.subj_id = 'sub-01'
+        >>> s3grab.run()  # doctest: +SKIP
     """
+
     input_spec = S3DataGrabberInputSpec
     output_spec = DynamicTraitedSpec
     _always_run = True
+    _pkg = 'boto'
 
     def __init__(self, infields=None, outfields=None, **kwargs):
         """
@@ -919,6 +905,7 @@ class S3DataGrabber(IOBase):
     def _list_outputs(self):
         # infields are mandatory, however I could not figure out how to set 'mandatory' flag dynamically
         # hence manual check
+        import boto
         if self._infields:
             for key in self._infields:
                 value = getattr(self.inputs, key)
@@ -1035,6 +1022,7 @@ class S3DataGrabber(IOBase):
     # Takes an s3 address and downloads the file to a local
     # directory, returning the local path.
     def s3tolocal(self, s3path, bkt):
+        import boto
         # path formatting
         if not os.path.split(self.inputs.local_directory)[1] == '':
             self.inputs.local_directory += '/'
@@ -1817,7 +1805,7 @@ class XNATSourceInputSpec(DynamicTraitedSpec, BaseInterfaceInputSpec):
     cache_dir = Directory(desc='Cache directory')
 
 
-class XNATSource(IOBase):
+class XNATSource(LibraryBaseInterface, IOBase):
     """ Generic XNATSource module that wraps around the pyxnat module in
         an intelligent way for neuroimaging tasks to grab files and data
         from an XNAT server.
@@ -1852,6 +1840,7 @@ class XNATSource(IOBase):
     """
     input_spec = XNATSourceInputSpec
     output_spec = DynamicTraitedSpec
+    _pkg = 'pyxnat'
 
     def __init__(self, infields=None, outfields=None, **kwargs):
         """
@@ -1901,6 +1890,7 @@ class XNATSource(IOBase):
     def _list_outputs(self):
         # infields are mandatory, however I could not figure out
         # how to set 'mandatory' flag dynamically, hence manual check
+        import pyxnat
 
         cache_dir = self.inputs.cache_dir or tempfile.gettempdir()
 
@@ -2034,16 +2024,18 @@ class XNATSinkInputSpec(DynamicTraitedSpec, BaseInterfaceInputSpec):
             super(XNATSinkInputSpec, self).__setattr__(key, value)
 
 
-class XNATSink(IOBase):
+class XNATSink(LibraryBaseInterface, IOBase):
     """ Generic datasink module that takes a directory containing a
         list of nifti files and provides a set of structured output
         fields.
     """
     input_spec = XNATSinkInputSpec
+    _pkg = 'pyxnat'
 
     def _list_outputs(self):
         """Execute this module.
         """
+        import pyxnat
 
         # setup XNAT connection
         cache_dir = self.inputs.cache_dir or tempfile.gettempdir()
@@ -2202,7 +2194,7 @@ class SQLiteSinkInputSpec(DynamicTraitedSpec, BaseInterfaceInputSpec):
     table_name = Str(mandatory=True)
 
 
-class SQLiteSink(IOBase):
+class SQLiteSink(LibraryBaseInterface, IOBase):
     """ Very simple frontend for storing values into SQLite database.
 
         .. warning::
@@ -2222,6 +2214,7 @@ class SQLiteSink(IOBase):
 
     """
     input_spec = SQLiteSinkInputSpec
+    _pkg = 'sqlite3'
 
     def __init__(self, input_names, **inputs):
 
@@ -2233,6 +2226,7 @@ class SQLiteSink(IOBase):
     def _list_outputs(self):
         """Execute this module.
         """
+        import sqlite3
         conn = sqlite3.connect(
             self.inputs.database_file, check_same_thread=False)
         c = conn.cursor()
@@ -2333,7 +2327,7 @@ class SSHDataGrabberInputSpec(DataGrabberInputSpec):
         desc='If set SSH commands will be logged to the given file')
 
 
-class SSHDataGrabber(DataGrabber):
+class SSHDataGrabber(LibraryBaseInterface, DataGrabber):
     """ Extension of DataGrabber module that downloads the file list and
         optionally the files from a SSH server. The SSH operation must
         not need user and password so an SSH agent must be active in
@@ -2397,6 +2391,7 @@ class SSHDataGrabber(DataGrabber):
     input_spec = SSHDataGrabberInputSpec
     output_spec = DynamicTraitedSpec
     _always_run = False
+    _pkg = 'paramiko'
 
     def __init__(self, infields=None, outfields=None, **kwargs):
         """
@@ -2411,11 +2406,6 @@ class SSHDataGrabber(DataGrabber):
         See class examples for usage
 
         """
-        try:
-            paramiko
-        except NameError:
-            warn("The library paramiko needs to be installed"
-                 " for this module to run.")
         if not outfields:
             outfields = ['outfiles']
         kwargs = kwargs.copy()
@@ -2490,11 +2480,7 @@ class SSHDataGrabber(DataGrabber):
         return outfiles
 
     def _list_outputs(self):
-        try:
-            paramiko
-        except NameError:
-            raise ImportError("The library paramiko needs to be installed"
-                              " for this module to run.")
+        import paramiko
 
         if len(self.inputs.ssh_log_to_file) > 0:
             paramiko.util.log_to_file(self.inputs.ssh_log_to_file)
@@ -2574,6 +2560,7 @@ class SSHDataGrabber(DataGrabber):
         return outputs
 
     def _get_ssh_client(self):
+        import paramiko
         config = paramiko.SSHConfig()
         config.parse(open(os.path.expanduser('~/.ssh/config')))
         host = config.lookup(self.inputs.hostname)
@@ -2751,21 +2738,26 @@ class JSONFileSink(IOBase):
 
 
 class BIDSDataGrabberInputSpec(DynamicTraitedSpec):
-    base_dir = Directory(exists=True,
-                         desc='Path to BIDS Directory.',
-                         mandatory=True)
-    output_query = traits.Dict(key_trait=Str,
-                               value_trait=traits.Dict,
-                               desc='Queries for outfield outputs')
-    raise_on_empty = traits.Bool(True, usedefault=True,
-                                 desc='Generate exception if list is empty '
-                                 'for a given field')
-    return_type = traits.Enum('file', 'namedtuple', usedefault=True)
-    strict = traits.Bool(desc='Return only BIDS "proper" files (e.g., '
-                              'ignore derivatives/, sourcedata/, etc.)')
+    base_dir = Directory(
+        exists=True,
+        desc='Path to BIDS Directory.',
+        mandatory=True)
+    output_query = traits.Dict(
+        key_trait=Str,
+        value_trait=traits.Dict,
+        desc='Queries for outfield outputs')
+    raise_on_empty = traits.Bool(
+        True, usedefault=True,
+        desc='Generate exception if list is empty for a given field')
+    index_derivatives = traits.Bool(
+        False, mandatory=True, usedefault=True,
+        desc='Index derivatives/ sub-directory')
+    extra_derivatives = traits.List(
+        Directory(exists=True),
+        desc='Additional derivative directories to index')
 
 
-class BIDSDataGrabber(IOBase):
+class BIDSDataGrabber(LibraryBaseInterface, IOBase):
 
     """ BIDS datagrabber module that wraps around pybids to allow arbitrary
     querying of BIDS datasets.
@@ -2788,16 +2780,17 @@ class BIDSDataGrabber(IOBase):
     are filtered on common entities, which can be explicitly defined as
     infields.
 
-    >>> bg = BIDSDataGrabber(infields = ['subject'], outfields = ['dwi'])
+    >>> bg = BIDSDataGrabber(infields = ['subject'])
     >>> bg.inputs.base_dir = 'ds005/'
     >>> bg.inputs.subject = '01'
-    >>> bg.inputs.output_query['dwi'] = dict(modality='dwi')
+    >>> bg.inputs.output_query['dwi'] = dict(datatype='dwi')
     >>> results = bg.run() # doctest: +SKIP
 
     """
     input_spec = BIDSDataGrabberInputSpec
     output_spec = DynamicTraitedSpec
     _always_run = True
+    _pkg = 'bids'
 
     def __init__(self, infields=None, **kwargs):
         """
@@ -2810,13 +2803,17 @@ class BIDSDataGrabber(IOBase):
 
         if not isdefined(self.inputs.output_query):
             self.inputs.output_query = {
-                "func": {"modality": "func", 'extensions': ['nii', '.nii.gz']},
-                "anat": {"modality": "anat", 'extensions': ['nii', '.nii.gz']},
+                "bold": {"datatype": "func", "suffix": "bold",
+                         "extensions": ["nii", ".nii.gz"]},
+                "T1w": {"datatype": "anat", "suffix": "T1w",
+                        "extensions": ["nii", ".nii.gz"]},
                 }
 
         # If infields is empty, use all BIDS entities
-        if infields is None and have_pybids:
-            bids_config = join(dirname(bidslayout.__file__), 'config', 'bids.json')
+        if infields is None:
+            from bids import layout as bidslayout
+            bids_config = join(
+                dirname(bidslayout.__file__), 'config', 'bids.json')
             bids_config = json.load(open(bids_config, 'r'))
             infields = [i['name'] for i in bids_config['entities']]
 
@@ -2830,18 +2827,13 @@ class BIDSDataGrabber(IOBase):
 
         self.inputs.trait_set(trait_change_notify=False, **undefined_traits)
 
-    def _run_interface(self, runtime):
-        if not have_pybids:
-            raise ImportError(
-                "The BIDSEventsGrabber interface requires pybids."
-                " Please make sure it is installed.")
-        return runtime
-
     def _list_outputs(self):
-        exclude = None
-        if self.inputs.strict:
-            exclude = ['derivatives/', 'code/', 'sourcedata/']
-        layout = bidslayout.BIDSLayout(self.inputs.base_dir, exclude=exclude)
+        from bids import BIDSLayout
+        layout = BIDSLayout(self.inputs.base_dir,
+                            derivatives=self.inputs.index_derivatives)
+
+        if isdefined(self.inputs.extra_derivatives):
+            layout.add_derivatives(self.inputs.extra_derivatives)
 
         # If infield is not given nm input value, silently ignore
         filters = {}
@@ -2854,7 +2846,7 @@ class BIDSDataGrabber(IOBase):
         for key, query in self.inputs.output_query.items():
             args = query.copy()
             args.update(filters)
-            filelist = layout.get(return_type=self.inputs.return_type, **args)
+            filelist = layout.get(return_type='file', **args)
             if len(filelist) == 0:
                 msg = 'Output key: %s returned no files' % key
                 if self.inputs.raise_on_empty:

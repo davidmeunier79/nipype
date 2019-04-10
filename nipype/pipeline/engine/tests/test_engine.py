@@ -441,7 +441,7 @@ def test_write_graph_runs(tmpdir):
 
             assert os.path.exists('graph.dot') or os.path.exists(
                 'graph_detailed.dot')
-       
+
             try:
                 os.remove('graph.dot')
             except OSError:
@@ -484,9 +484,12 @@ def test_deep_nested_write_graph_runs(tmpdir):
             except OSError:
                 pass
 
+import networkx
+# Format of the graph has slightly changed
+graph_str = '""' if int(networkx.__version__.split('.')[0]) == 1 else ''
 
 # examples of dot files used in the following test
-dotfile_orig = ['strict digraph  {\n',
+dotfile_orig = ['strict digraph ' + graph_str + ' {\n',
                 '"mod1 (engine)";\n',
                 '"mod2 (engine)";\n',
                 '"mod1 (engine)" -> "mod2 (engine)";\n',
