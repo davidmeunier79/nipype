@@ -1935,11 +1935,17 @@ class NwarpApplyInputSpec(CommandLineInputSpec):
         desc='specify a different interpolation method than might '
         'be used for the warp',
         argstr='-ainterp %s')
-    out_file = File(
-        name_template='%s_Nwarp',
-        desc='output image file name',
+    out_file = traits.Either(
+        File(),
+        traits.List(File()),
+        mandatory=True,
         argstr='-prefix %s',
-        name_source='in_file')
+        desc='output image file name')
+    #File(
+        #name_template='%s_Nwarp',
+        #desc='output image file name',
+        #argstr='-prefix %s',
+        #name_source='in_file')
     short = traits.Bool(
         desc='Write output dataset using 16-bit short integers, rather than '
         'the usual 32-bit floats.',
