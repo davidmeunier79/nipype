@@ -2001,6 +2001,8 @@ class NwarpApply(AFNICommandBase):
                     #suffix='_NwarpCat+tlrc',
                     #ext='.HEAD'))
 
+        0/0
+
         return outputs
 
 
