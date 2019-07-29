@@ -1955,6 +1955,10 @@ class NwarpApplyInputSpec(CommandLineInputSpec):
     verb = traits.Bool(
         desc='be extra verbose :)', argstr='-verb', xor=['quiet'])
 
+class NwarpApplyOutputSpec(AFNICommandOutputSpec):
+    out_file = traits.Either(
+            File(),
+            traits.List(File()))
 
 class NwarpApply(AFNICommandBase):
     """Program to apply a nonlinear 3D warp saved from 3dQwarp
@@ -1979,7 +1983,26 @@ class NwarpApply(AFNICommandBase):
     """
     _cmd = '3dNwarpApply'
     input_spec = NwarpApplyInputSpec
-    output_spec = AFNICommandOutputSpec
+    output_spec = NwarpApplyOutputSpec
+
+    def _list_outputs(self):
+        outputs = self.output_spec().get()
+        if isdefined(self.inputs.out_file):
+
+            if isinstance(self.inputs.out_file,list):
+                print ([os.path.abspath(out) for out in self.inputs.out_file])
+                outputs['out_file'] = [os.path.abspath(out) for out in self.inputs.out_file]
+            else:
+                outputs['out_file'] = os.path.abspath(self.inputs.out_file)
+        #else:
+            #outputs['out_file'] = os.path.abspath(
+                #self._gen_fname(
+                    #self.inputs.in_files[0],
+                    #suffix='_NwarpCat+tlrc',
+                    #ext='.HEAD'))
+
+        return outputs
+
 
 
 class NwarpCatInputSpec(AFNICommandInputSpec):
