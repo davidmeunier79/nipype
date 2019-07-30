@@ -148,15 +148,13 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(TR, wf_name='preprocess_stru
     inputnode = pe.Node(niu.IdentityInterface(fields=['functionals',
                                                       'struct']),
                         name='inputnode')
-     
     #### trim
-    
     if nb_scans_to_remove == 0:
         trimming = False
         
-    if trimming == True:
+    if trimming:
         
-        if mult == True:    
+        if mult:
             trim = pe.MapNode(interface=Trim(), iterfield = ['in_file'],name ="trim")
             
         else:
@@ -165,7 +163,7 @@ def create_preprocess_struct_to_mean_funct_4D_spm12(TR, wf_name='preprocess_stru
         trim.inputs.begin_index = nb_scans_to_remove
         
 
-    if slice_timing == True:
+    if slice_timing:
         
         #### sliceTiming
         sliceTiming = pe.Node(interface=spm.SliceTiming(), name="sliceTiming")
