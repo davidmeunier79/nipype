@@ -157,7 +157,7 @@ class BaseInterface(Interface):
     resource_monitor = True  # Enabled for this interface IFF enabled in the config
     _etelemetry_version_data = None
 
-    def __init__(self, from_file=None, resource_monitor=None,
+    def __init__(self, from_file=None, from_dict=None, resource_monitor=None,
                  ignore_exception=False, **inputs):
         if config.getboolean('execution', 'check_version'):
             from ... import check_latest_version
@@ -176,6 +176,12 @@ class BaseInterface(Interface):
 
         if from_file is not None:
             self.load_inputs_from_json(from_file, overwrite=True)
+
+            for name, value in list(inputs.items()):
+                setattr(self.inputs, name, value)
+
+        if from_dict is not None:
+            self.load_inputs_from_dict(from_dict, overwrite=True)
 
             for name, value in list(inputs.items()):
                 setattr(self.inputs, name, value)
@@ -493,14 +499,18 @@ Output trait(s) %s not available in version %s of interface %s.\
         with open(json_file) as fhandle:
             inputs_dict = json.load(fhandle)
 
+        load_inputs_from_dict(inputs_dict, overwrite=overwrite)
+
+    def load_inputs_from_dict(self, from_dict, overwrite):
+
         def_inputs = []
         if not overwrite:
             def_inputs = list(self.inputs.get_traitsfree().keys())
 
-        new_inputs = list(set(list(inputs_dict.keys())) - set(def_inputs))
+        new_inputs = list(set(list(from_dict.keys())) - set(def_inputs))
         for key in new_inputs:
             if hasattr(self.inputs, key):
-                setattr(self.inputs, key, inputs_dict[key])
+                setattr(self.inputs, key, from_dict[key])
 
     def save_inputs_to_json(self, json_file):
         """
