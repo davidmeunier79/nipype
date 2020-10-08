@@ -165,11 +165,9 @@ def create_level2_two_sample_ttest_spm12(wf_name = "level2_two_sample_test"):
     l2Analysis.connect(l2Ttester,'spm_mat_file',l2Estimttest,'spm_mat_file')
     
     
-    
     #### contrast estimate
     l2Conest = pe.Node(interface = spm.EstimateContrast(), name = 'l2Conest')
     
-
     ### Group level
     cont_group1 = ('Group_1','T', ['Group_{1}'],[1])
     cont_group2 = ('Group_2','T', ['Group_{2}'],[1])

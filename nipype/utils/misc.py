@@ -386,9 +386,7 @@ def show_length(files):
     
 ### utilitaire pour vérifier une liste sans avoir à créer de nouveaux noeuds
 def show_files(files):
-
     print(files)
-    
     return files
 
 ### idem fonction list::index(), mais retourne tous les indices de la liste ou l'item est présent
